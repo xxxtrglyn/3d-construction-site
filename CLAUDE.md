@@ -4,8 +4,10 @@ A browser-based 3D chibi construction-site sandbox: about 100 players per world 
 and players join from a link.
 
 - **Constitution (binding)**: `.specify/memory/constitution.md`
-- **Active feature**: `specs/002-multiplayer-core/` (multiplayer world with Host crews: spec, plan,
-  research, data model, contracts). Feature 001 (`specs/001-single-player-prototype/`) is done and
+- **Active feature**: `specs/003-construction-machines/` (operable crane, excavator, forklift and
+  mixer per plot and in solo; Groundwork and crane-only high slots; protocol v2: spec, plan,
+  research M1–M16, data model, contracts). Feature 002 (`specs/002-multiplayer-core/`, multiplayer
+  world with Host crews) is implemented; its gate has owner/device/playtest items open. Feature 001
   stays available as solo mode (`?solo=1`).
 - **Approved art references**: `assets/renders/` (toon look); source scenes are in
   `assets/blender/`
@@ -42,8 +44,9 @@ Debug URLs:
 Server env: `HHT_PORT`, `HHT_DB`, `HHT_SHIFT_MINUTES`, `HHT_MAX_PLAYERS`, `HHT_METRICS=1`,
 `HHT_DEV_CHEATS=1`, `HHT_MM_PER_MIN`, `HHT_BLOCKLIST_DIR`.
 
-Status: feature 001 is done (gate in `specs/001-single-player-prototype/gate.md`). Feature 002 is in
-`specs/002-multiplayer-core/` (gate in its `gate.md`).
+Status: feature 001 is done (gate in `specs/001-single-player-prototype/gate.md`). Feature 002 is
+implemented (gate in `specs/002-multiplayer-core/gate.md`, automated items pass). Feature 003 is
+planned in `specs/003-construction-machines/`.
 
 ## Rules of thumb
 
@@ -51,6 +54,8 @@ Status: feature 001 is done (gate in `specs/001-single-player-prototype/gate.md`
 - Multiplayer is server-authoritative. Clients send only inputs and intents (`shared/protocol.ts`).
   Movement uses only the deterministic `stepWorker()` (`shared/kinematics.ts`) on both sides, so
   never add client-only movement code. Server systems orchestrate; rules stay pure.
+- Machines (003) are parameter rigs stepped only by the shared `stepMachine()` (`shared/machines.ts`)
+  on the server, the operating client, solo mode and the bots. Never use Rapier for machines.
 - The binary world snapshot message is `ws`. `snap` is the JSON "piece snapped" event.
 - Never exceed the budgets in `tools/assets/budgets.json`. The critical payload must stay ≤ 5 MB.
 - The visual look must match the reference renders: a 2-band toon ramp with shadow tint
