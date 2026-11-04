@@ -11,6 +11,9 @@ export class TouchControls {
   private readonly knob: HTMLDivElement;
   private readonly actionBtn: HTMLButtonElement;
   private readonly tossBtn: HTMLButtonElement;
+  private readonly jumpBtn: HTMLButtonElement;
+  private holding = false;
+  private machine: { action: string; disabled: boolean; toss: string | null } | null = null;
   private stickId: number | null = null;
   private lookId: number | null = null;
   private origin = { x: 0, y: 0 };
@@ -50,7 +53,8 @@ export class TouchControls {
     };
     this.tossBtn = mk('TOSS', 'toss', 'toss');
     this.actionBtn = mk('GRAB', 'action', 'action');
-    buttons.append(this.tossBtn, mk('JUMP', 'jump', 'jump'), this.actionBtn);
+    this.jumpBtn = mk('JUMP', 'jump', 'jump');
+    buttons.append(this.tossBtn, this.jumpBtn, this.actionBtn);
     this.root.append(this.stick, buttons);
     hud.appendChild(this.root);
 
@@ -63,8 +67,33 @@ export class TouchControls {
 
   /** Update the context label: GRAB when empty-handed, DROP while holding. Toss shows only while holding. */
   setHolding(holding: boolean): void {
+    this.holding = holding;
+    if (this.machine) return;
     this.actionBtn.textContent = holding ? 'DROP' : 'GRAB';
     this.tossBtn.classList.toggle('hidden', !holding);
+  }
+
+  /**
+   * Feature 003: while operating, the buttons are re-mapped, not added — ACTION names the next machine
+   * action (greyed with a reason when nothing is possible), JUMP reads "Exit", TOSS reads "Camera" in the
+   * crane and is hidden otherwise. `null` restores the walking labels.
+   */
+  setMachineMode(m: { action: string; disabled: boolean; toss: string | null } | null): void {
+    const key = m ? `${m.action}|${m.disabled}|${m.toss}` : '';
+    const prev = this.machine ? `${this.machine.action}|${this.machine.disabled}|${this.machine.toss}` : '';
+    if (key === prev) return;
+    this.machine = m;
+    if (!m) {
+      this.jumpBtn.textContent = 'JUMP';
+      this.actionBtn.classList.remove('disabled');
+      this.setHolding(this.holding);
+      return;
+    }
+    this.actionBtn.textContent = m.action.toUpperCase();
+    this.actionBtn.classList.toggle('disabled', m.disabled);
+    this.jumpBtn.textContent = 'EXIT';
+    this.tossBtn.textContent = m.toss ? m.toss.toUpperCase() : 'TOSS';
+    this.tossBtn.classList.toggle('hidden', !m.toss);
   }
 
   private show(): void {

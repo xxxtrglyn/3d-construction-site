@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { resolve } from 'node:path';
-import { BIN, CHAT, CREW, LOOSE_MP, NET, PLOTS, SHIFT } from '@hht/shared';
+import { BIN, CHAT, CREW, LOOSE_MP, MACHINE, NET, PLOTS, SHIFT } from '@hht/shared';
 
 /** All tunable timers in seconds (tests shorten them; defaults come from shared constants). */
 export interface Timers {
@@ -21,6 +21,8 @@ export interface Timers {
   warnS: number;
   countdownS: number;
   looseFadeS: number;
+  /** feature 003: an operator with no input for this long is put out */
+  machineIdleS: number;
 }
 
 export interface ServerConfig {
@@ -63,6 +65,7 @@ export const DEFAULT_TIMERS: Timers = {
   warnS: SHIFT.warnS,
   countdownS: SHIFT.countdownS,
   looseFadeS: LOOSE_MP.fadeAfterSeconds,
+  machineIdleS: MACHINE.idleExitS,
 };
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env, overrides: Partial<Omit<ServerConfig, 'timers'>> & { timers?: Partial<Timers> } = {}): ServerConfig {

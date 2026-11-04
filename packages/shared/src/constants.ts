@@ -78,3 +78,27 @@ export const CHAT = {
 export const SOCIAL = { emoteRadiusM: 35, showS: 3 } as const;
 
 export const BIN = { capacity: 10 } as const;
+
+// ---------------------------------------------------------------- construction machines (feature 003)
+
+/**
+ * Machine tuning (research M8). Starting values, tuned in playtests: change them only here (and in
+ * the spec's assumption list). Units: meters, seconds, radians.
+ */
+export const MACHINE = {
+  /** max distance from the cab (crane: the mast base) to get in */
+  enterRange: 1.5,
+  /** an operator with no input for this long is put out */
+  idleExitS: 60,
+  /** `act` edges per second beyond this are ignored (no strike) */
+  actPerSecond: 4,
+  excavator: { speed: 2.8, turnRate: 1.6, scoopS: 0.9, dumpS: 0.7, pitReach: 1.2, spoilReach: 1.5 },
+  forklift: { speed: 6.5, steerMax: 0.6, rackReach: 1.0, palletMax: 4 },
+  crane: { slewRate: 0.9, trolleySpeed: 3.0, reachMin: 2.5, reachMax: 7.5, hookS: 1.0, grabRadius: 0.8, snapRadius: 1.5 },
+  mixer: { capacity: 4, mixS: 5 },
+  groundwork: { scoops: 6, concrete: 4 },
+  /** an unchanged machine record is re-sent to a receiver after this long */
+  keyframeS: 2,
+  /** set-down search radius for pieces released by a machine */
+  setDownRadius: 2,
+} as const;

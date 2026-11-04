@@ -4,7 +4,7 @@ import {
   type MoveInput, type SiteLayout, type WorkerState,
 } from '../src/index.ts';
 
-const still = (seq = 0): MoveInput => ({ seq, dx: 0, dz: 0, run: false, jump: false });
+const still = (seq = 0): MoveInput => ({ seq, dx: 0, dz: 0, run: false, jump: false, act: false, alt: false });
 const run = (n: number, s: WorkerState, f: (i: number) => MoveInput, site: SiteLayout = SITE): WorkerState[] => {
   const out: WorkerState[] = [];
   let st = s;
@@ -17,7 +17,7 @@ const randomInputs = (seed: number, n: number): MoveInput[] => {
   let dir = { dx: 0, dz: 0 };
   for (let i = 0; i < n; i++) {
     if (i % 30 === 0) dir = quantizeDir(rng() * 2 - 1, rng() * 2 - 1);
-    out.push({ seq: i & 0xffff, ...dir, run: rng() < 0.5, jump: rng() < 0.02 });
+    out.push({ seq: i & 0xffff, ...dir, run: rng() < 0.5, jump: rng() < 0.02, act: false, alt: false });
   }
   return out;
 };
@@ -47,7 +47,7 @@ describe('stepWorker', () => {
   });
 
   it('caps horizontal speed (run 5.5 m/s, carrying a beam 15 % slower)', () => {
-    const fwd = (seq: number): MoveInput => ({ seq, dx: 0, dz: 127, run: true, jump: false });
+    const fwd = (seq: number): MoveInput => ({ seq, dx: 0, dz: 127, run: true, jump: false, act: false, alt: false });
     const free = run(240, { ...initialWorker({ x: -2, y: 0, z: -20 }) }, fwd);
     const heavy = run(240, { ...initialWorker({ x: -2, y: 0, z: -20 }), carrying: 'beam' }, fwd);
     for (const s of free) expect(Math.hypot(s.vx, s.vz)).toBeLessThanOrEqual(MOVE.runSpeed + 1e-9);
@@ -85,7 +85,7 @@ describe('stepWorker', () => {
 
   it('steps onto a 0.3 m box but is blocked by a 0.5 m box', () => {
     const mk = (top: number): SiteLayout => ({ ...SITE, obstacles: { boxes: [{ x: 0, z: 0, hx: 1, hz: 1, c: 1, s: 0, top }], cylinders: [] } });
-    const fwd = (seq: number): MoveInput => ({ seq, dx: 127, dz: 0, run: false, jump: false });
+    const fwd = (seq: number): MoveInput => ({ seq, dx: 127, dz: 0, run: false, jump: false, act: false, alt: false });
     const low = run(120, initialWorker({ x: -3, y: 0, z: 0 }), fwd, mk(0.3));
     expect(low.some((s) => s.y === 0.3 && Math.abs(s.x) < 0.5)).toBe(true);
     const high = run(120, initialWorker({ x: -3, y: 0, z: 0 }), fwd, mk(0.5));
@@ -104,7 +104,7 @@ describe('stepWorker', () => {
     const blocker = towerBlocker(plot);
     const toward = quantizeDir(plot.x - 0, plot.z - 0);
     let s = initialWorker({ x: plot.x * 0.7, y: 0, z: plot.z * 0.7 });
-    for (let i = 0; i < 600; i++) s = stepWorker(s, { seq: i, ...toward, run: true, jump: false }, SIM_DT, SITE, [blocker]);
+    for (let i = 0; i < 600; i++) s = stepWorker(s, { seq: i, ...toward, run: true, jump: false, act: false, alt: false }, SIM_DT, SITE, [blocker]);
     const d = Math.hypot(s.x - plot.x, s.z - plot.z);
     expect(d).toBeGreaterThanOrEqual(plot.towerHalf + WORKER_RADIUS - 1e-6);
   });

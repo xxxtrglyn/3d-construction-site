@@ -1,5 +1,5 @@
 import { CLOCK_TOWER, starsOf } from '@hht/shared';
-import type { WorldView } from '../net/connection.ts';
+import { progressOf, type WorldView } from '../net/connection.ts';
 import { flagHtml } from './flags.ts';
 import { Panel, button } from './panel.ts';
 
@@ -57,7 +57,7 @@ export class ForemanDialog {
     Array.from(st.plots).forEach((p, i) => {
       if (p.state !== 'building' || p.joinMode === 'solo' || p.crewSize >= 8 || p.crewSize === 0) return;
       n++;
-      const stars = starsOf({ blueprintId: CLOCK_TOWER.id, completedStages: p.completedStages, filledSlots: p.filledSlots });
+      const stars = starsOf(progressOf(p));
       const r = this.panel.row(`${flagHtml(i, 16)} ${p.hostName}’s Clock Tower`, `${'★'.repeat(stars)}${'☆'.repeat(5 - stars)} · 👥 ${p.crewSize}/8 · ${p.joinMode === 'open' ? 'Open' : 'Ask to join'}`);
       button('Show me', r, () => {
         this.h.guide(i);

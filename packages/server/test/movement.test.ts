@@ -22,7 +22,7 @@ describe('server-authoritative movement', () => {
     }
     await until(() => p.lastSnap()?.ackSeq === 90);
     let local = initialWorker(SITE.spawn);
-    for (let i = 0; i < 90; i++) local = stepWorker(local, { seq: i + 1, dx: 0, dz: 0, run: false, jump: false, ...inputs[i] }, SIM_DT, SITE);
+    for (let i = 0; i < 90; i++) local = stepWorker(local, { seq: i + 1, dx: 0, dz: 0, run: false, jump: false, act: false, alt: false, ...inputs[i] }, SIM_DT, SITE);
     const own = p.lastSnap().own;
     expect({ ...own, facing: 0 }).toEqual({ ...local, facing: 0 });
     await p.leave();

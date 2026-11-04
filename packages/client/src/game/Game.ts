@@ -1,5 +1,16 @@
 import * as THREE from 'three';
-import { HAT_COLORS, MOVE, PIECE_TYPES, INTERACT, type PieceTypeId } from '@hht/shared';
+import {
+  CLOCK_TOWER, HAT_COLORS, MACHINE, MOVE, PIECE_TYPES, INTERACT, currentStage, entryPoint, groundworkDone, groundworkPart, towerBlocker,
+  type MachineKind, type PieceTypeId, type SiteLayout,
+} from '@hht/shared';
+import { MachineRenderer } from '../machines/MachineRenderer.ts';
+import { SoloMachines } from '../machines/SoloMachines.ts';
+import { MachineCameras } from '../player/machineCameras.ts';
+import { MachineHints } from '../ui/machineHints.ts';
+import { GroundworkView } from '../world/groundworkView.ts';
+import { HighSlotRings } from '../world/highSlots.ts';
+import { MachineCue } from '../world/machineCue.ts';
+import type { SampleId } from '../audio/sfx.ts';
 import type { AssetStore } from '../assets/loader.ts';
 import { Sfx } from '../audio/sfx.ts';
 import { Celebration } from '../fx/celebration.ts';
@@ -20,7 +31,7 @@ import { configureOutlines, setOutlinesVisible } from '../render/outline.ts';
 import type { QualitySettings } from '../render/quality.ts';
 import type { RenderContext } from '../render/renderer.ts';
 import { Hud } from '../ui/hud.ts';
-import { LOT_HALF, OBSTACLES, PLAY_HALF, RACK_DISPLAY, RACK_HALF, readLayout, type Layout } from '../world/layout.ts';
+import { LOT_HALF, OBSTACLES, PLAY_HALF, RACK_DISPLAY, RACK_HALF, readLayout, soloSite, type Layout } from '../world/layout.ts';
 import { PieceRenderer } from '../world/pieceRenderer.ts';
 import { SlotMarkers } from '../world/slotMarkers.ts';
 import { TowerView } from '../world/towerView.ts';
@@ -28,7 +39,14 @@ import { findTarget, type Target } from './interaction.ts';
 import { PieceManager, type Piece } from './pieceManager.ts';
 import { TowerPlot } from './towerPlot.ts';
 
-export type GameEvent = 'snapped' | 'stageComplete' | 'masterpiece' | 'wrongPiece' | 'pickup' | 'drop' | 'toss' | 'ready';
+export type GameEvent = 'snapped' | 'stageComplete' | 'masterpiece' | 'wrongPiece' | 'pickup' | 'drop' | 'toss' | 'ready' | 'ground' | 'machineEnter' | 'machineExit';
+
+const MACHINE_NAME: Record<MachineKind, string> = { crane: 'the crane', excavator: 'the excavator', forklift: 'the forklift', mixer: 'the mixer' };
+const ENGINE: Record<MachineKind, SampleId> = { crane: 'crane-winch', excavator: 'engine-diesel', forklift: 'forklift-motor', mixer: 'mixer-drum' };
+const ACT_SOUND: Record<string, [SampleId, number]> = {
+  scoop: ['scoop-dirt', 1], dump: ['dump-dirt', 1], dumpBack: ['dump-dirt', 0.6], hookGrab: ['hook-clank', 1], hookRelease: ['hydraulic', 0.9],
+  palletLoad: ['pallet-clunk', 1], palletUnload: ['pallet-clunk', 0.9], mixStart: ['hydraulic', 0.7], mixDone: ['mix-done', 1], bagIn: ['pallet-clunk', 0.5],
+};
 
 const v3 = (): THREE.Vector3 => new THREE.Vector3();
 
@@ -50,6 +68,16 @@ export class Game extends GameShell {
   celebration!: Celebration;
   hud!: Hud;
   touch: TouchControls | null = null;
+  // feature 003: the solo lot's machines (same shared rules as multiplayer)
+  site!: SiteLayout;
+  machines!: SoloMachines;
+  machineRenderer!: MachineRenderer;
+  machineCams!: MachineCameras;
+  machineHints!: MachineHints;
+  groundwork!: GroundworkView;
+  highSlots!: HighSlotRings;
+  cue!: MachineCue;
+  private machineTargetId = -1;
   private towerCollider: RAPIER.Collider | null = null;
   private target: Target | null = null;
   private readonly targetRing: THREE.Mesh;
@@ -94,6 +122,7 @@ export class Game extends GameShell {
     });
     this.applyLotShadows();
     this.layout = readLayout(lot);
+    this.site = soloSite(this.layout);
     this.buildStaticColliders();
 
     const prof = this.profile.get();
@@ -103,6 +132,7 @@ export class Game extends GameShell {
     this.controller.facing = Math.PI; // face the tower (-Z)
     this.camera = new FollowCamera(camera);
     this.camera.yaw = 0;
+    this.machineCams = new MachineCameras(this.camera);
 
     this.pieces = new PieceManager(this.physics);
     this.pieceRenderer = new PieceRenderer(this.assets.get('pieces') as THREE.Group);
@@ -114,12 +144,23 @@ export class Game extends GameShell {
     scene.add(this.tower.group);
     this.plot = new TowerPlot(this.layout.plot, this.pieces, (i) => this.markers.slotPosition(i), {
       onSnap: (piece, result, progress) => this.onSnap(piece, result, progress.filledSlots),
-      onWrong: (piece, needed) => this.onWrong(piece, needed),
+      onWrong: (piece, needed, reason) => this.onWrong(piece, needed, reason),
+      onGround: (progress, done) => this.onGround(progress.groundDug, progress.groundPoured, done),
       onStageComplete: () => this.onStageComplete(),
       onMasterpiece: () => this.onMasterpiece(),
     });
     this.puffs = new Puffs();
     scene.add(this.puffs.mesh);
+    // feature 003: machines, Groundwork visuals, high-slot rings and the cue
+    this.machines = new SoloMachines(this.site, this.pieces, this.plot, { act: (kind, act) => this.onMachineAct(kind, act) });
+    // only 4 machines in solo: full detail at any distance on the lot
+    this.machineRenderer = new MachineRenderer(this.assets, { outlines: this.quality.outlines, shadows: this.quality.tier === 'high', nearDist: 60 });
+    scene.add(this.machineRenderer.group);
+    window.setTimeout(() => this.machineRenderer.loadModels(), 1200);
+    this.groundwork = new GroundworkView([{ def: this.site.plots[0]!, spots: this.layout.machines }], this.hudRoot);
+    this.highSlots = new HighSlotRings(8);
+    this.cue = new MachineCue();
+    scene.add(this.groundwork.group, this.highSlots.group, this.cue.group);
     const reducedMotion = typeof matchMedia === 'function' && matchMedia('(prefers-reduced-motion: reduce)').matches;
     this.celebration = new Celebration(this.quality.particles * (reducedMotion ? 0.25 : 1));
     this.celebration.onBurst = () => this.sfx.play('firework');
@@ -154,6 +195,9 @@ export class Game extends GameShell {
     this.hud.setName(prof.name);
     this.hud.setWho(prof.name);
     this.sfx.setMuted(prof.muted);
+    this.machineHints = new MachineHints(this.hudRoot, this.profile);
+    window.setTimeout(() => void this.sfx.loadSamples(), 800);
+    this.sfx.startMusic();
 
     const canvas = this.ctx.renderer.domElement;
     attachKeyboardMouse(this.actions, canvas, () => this.sfx.unlock());
@@ -215,12 +259,15 @@ export class Game extends GameShell {
   private applyStage(initial = false): void {
     const pr = this.plot.progress;
     this.tower.show(pr.completedStages);
+    // feature 003: the pit shows instead of the foundation during Groundwork
+    this.tower.group.visible = !this.plot.inGroundwork;
     const stage = this.plot.stage;
-    this.markers.layout(this.layout.plot, stage?.slotCount ?? 0);
-    this.markers.setFilled(pr.filledSlots, !this.plot.masterpiece);
+    this.markers.layout(this.layout.plot, stage ? stage.slotCount - stage.highSlots : 0);
+    this.markers.setFilled(pr.filledSlots - pr.highFilled, !this.plot.masterpiece && !this.plot.inGroundwork);
     this.tower.sign.set(this.plot.stars, this.plot.masterpiece);
-    this.hud.setStage(stage?.name ?? 'Masterpiece', this.plot.stars, this.plot.masterpiece);
-    this.hud.setNeed(this.plot.needed, pr.filledSlots, stage?.slotCount ?? 0);
+    this.hud.setStage(this.plot.inGroundwork ? 'Groundwork' : (stage?.name ?? 'Masterpiece'), this.plot.stars, this.plot.masterpiece);
+    this.updateNeed();
+    if (this.machines) this.machines.blockers = pr.completedStages >= 1 ? [towerBlocker(this.site.plots[0]!)] : [];
     if (this.towerCollider) {
       this.physics.removeCollider(this.towerCollider);
       this.towerCollider = null;
@@ -242,10 +289,46 @@ export class Game extends GameShell {
     }
   }
 
+  /** The HUD's "what next" line: Groundwork parts and crane steps name the machine (FR-022). */
+  private updateNeed(): void {
+    const pr = this.plot.progress;
+    const part = groundworkPart(pr);
+    const stage = this.plot.stage;
+    if (part === 'dig') return this.hud.setNeedText(`🚜 Dig ${pr.groundDug}/${CLOCK_TOWER.groundwork.scoops}: use the excavator`);
+    if (part === 'concrete') return this.hud.setNeedText(`🥣 Concrete ${pr.groundPoured}/${CLOCK_TOWER.groundwork.concrete}: use the mixer`);
+    if (stage && stage.highSlots > 0 && pr.filledSlots - pr.highFilled >= stage.slotCount - stage.highSlots) {
+      return this.hud.setNeedText(stage.pieceType === 'bell' ? '🏗️ Bell: use the crane' : `🏗️ Roof ${pr.highFilled}/${stage.highSlots}: use the crane`);
+    }
+    this.hud.setNeed(this.plot.needed, pr.filledSlots - pr.highFilled, stage ? stage.slotCount - stage.highSlots : 0);
+  }
+
+  private onGround(dug: number, poured: number, done: boolean): void {
+    if (done) {
+      this.applyStage();
+      this.sfx.play('stage');
+      this.celebration.start(this.layout.plot, 2.5);
+      this.hud.showToast('★ Groundwork done! The Frame stage is unlocked', 3.5);
+    } else {
+      this.updateNeed();
+      if (poured > 0) this.sfx.playSample('concrete-pour', 0.8);
+      if (dug === CLOCK_TOWER.groundwork.scoops && poured === 0) this.hud.showToast('The pit is dug! Now pour the footing: use the mixer', 3.2);
+    }
+    this.emit('ground', { dug, poured, done });
+  }
+
+  private onMachineAct(kind: MachineKind, act: string): void {
+    const snd = ACT_SOUND[act];
+    if (snd) this.sfx.playSample(snd[0], snd[1]);
+    if (act === 'mixerFull') this.hud.showToast('Mixer is full');
+    if (act === 'mixDone') this.puffs.emit(new THREE.Vector3(this.layout.machines.mixer.chute.x, 0.6, this.layout.machines.mixer.chute.z), 8, 0.5, 0.35);
+    void kind;
+  }
+
   private onSnap(piece: Piece | null, _result: string, filled: number): void {
     const stage = this.plot.stage;
-    this.markers.setFilled(this.plot.progress.filledSlots, !this.plot.masterpiece);
-    this.hud.setNeed(this.plot.needed, this.plot.progress.filledSlots, stage?.slotCount ?? 0);
+    this.markers.setFilled(this.plot.progress.filledSlots - this.plot.progress.highFilled, !this.plot.masterpiece);
+    this.updateNeed();
+    void stage;
     this.sfx.play('snap');
     const at = piece ? piece.position.clone() : this.layout.plot.clone().add(new THREE.Vector3(0, 0.5, 2.3));
     this.puffs.emit(at, 7, 0.5, 0.35);
@@ -253,9 +336,11 @@ export class Game extends GameShell {
     this.emit('snapped', { filled });
   }
 
-  private onWrong(piece: Piece | null, needed: PieceTypeId | null): void {
+  private onWrong(piece: Piece | null, needed: PieceTypeId | null, reason?: string): void {
     this.sfx.play('wrong');
-    if (!needed) this.hud.showToast('The tower is finished! Press “Build again” to start over.');
+    if (reason === 'groundworkFirst') this.hud.showToast(groundworkPart(this.plot.progress) === 'dig' ? 'Dig the foundation first' : 'Pour the footing first', 2.6);
+    else if (reason === 'tooHigh') this.hud.showToast('Too high: use the crane', 2.6);
+    else if (!needed) this.hud.showToast('The tower is finished! Press “Build again” to start over.');
     else if (piece?.type === 'cone') this.hud.showToast(`Cones are just for fun! The tower needs: ${PIECE_TYPES[needed].label}`);
     else this.hud.showToast(`Needs: ${PIECE_TYPES[needed].label}`);
     this.emit('wrongPiece', { needed });
@@ -280,6 +365,8 @@ export class Game extends GameShell {
   }
 
   buildAgain(): void {
+    if (this.machines.seated >= 0) this.exitMachine();
+    this.machines.reset();
     this.plot.reset();
     this.celebration.stop();
     this.hud.setCelebrate(false);
@@ -289,6 +376,7 @@ export class Game extends GameShell {
   }
 
   respawn(): void {
+    if (this.machines.seated >= 0) this.exitMachine();
     const held = this.pieces.held();
     if (held) this.pieces.remove(held);
     this.controller.teleport(this.layout.spawn, Math.PI);
@@ -328,6 +416,9 @@ export class Game extends GameShell {
   private dropOrToss(toss: boolean): void {
     const held = this.pieces.held();
     if (!held) return;
+    // release from where the worker is now, not where it was last drawn (a teleport or a slow frame in between)
+    this.worker.root.position.copy(this.controller.position);
+    this.worker.root.rotation.y = this.controller.facing;
     const m = this.heldMatrix(held.type, this.tmpM);
     const pos = v3().setFromMatrixPosition(m);
     const q = new THREE.Quaternion().setFromRotationMatrix(m);
@@ -364,6 +455,51 @@ export class Game extends GameShell {
     this.emit('pickup', { type });
   }
 
+  // ---------------------------------------------------------------- machines (feature 003)
+
+  /** The nearest machine whose cab is within reach (solo: every machine is yours). */
+  private nearestMachine(): number {
+    const p = this.controller.position;
+    let best = -1;
+    let bd: number = MACHINE.enterRange;
+    this.machines.states.forEach((s, i) => {
+      const e = entryPoint(s, this.layout.machines);
+      const d = Math.hypot(e.x - p.x, e.z - p.z);
+      if (d <= bd) {
+        bd = d;
+        best = i;
+      }
+    });
+    return best;
+  }
+
+  enterMachine(id: number): void {
+    if (this.pieces.held()) {
+      this.hud.showToast('Hands full — put it down first');
+      return;
+    }
+    const kind = this.machines.kindAt(id);
+    this.machines.enter(id);
+    this.controller.collider.setEnabled(false);
+    this.machineCams.enter(kind);
+    this.machineHints.onEnter(kind);
+    this.sfx.playSample('hydraulic', 0.6);
+    this.emit('machineEnter', { kind });
+  }
+
+  exitMachine(): void {
+    const at = this.machines.exit();
+    if (!at) return;
+    this.controller.collider.setEnabled(true);
+    this.controller.teleport(new THREE.Vector3(at.x, 0.05, at.z), at.yaw);
+    this.camera.yaw = at.yaw + Math.PI;
+    this.machineCams.exit();
+    this.machineHints.hide();
+    this.touch?.setMachineMode(null);
+    this.sfx.pruneLoops(new Set());
+    this.emit('machineExit');
+  }
+
   // ---------------------------------------------------------------- loop
   override pause(): void {
     super.pause();
@@ -397,12 +533,24 @@ export class Game extends GameShell {
     const held = this.pieces.held();
     const heavy = held && (held.type === 'beam' || held.type === 'bell');
     const speed = (a.run ? MOVE.runSpeed : MOVE.walkSpeed) * (heavy ? 1 - MOVE.carrySlowdown : 1);
-    const wish = menu || this.cheerTimer > 0
+    const seated = this.machines.seated >= 0;
+    const wish = menu || this.cheerTimer > 0 || seated
       ? v3()
       : v3().addScaledVector(this.fwd, a.move.y).addScaledVector(this.right, a.move.x).multiplyScalar(speed);
-    if (!menu && a.wasPressed('jump')) this.controller.requestJump();
+    // feature 003: in a machine the same buttons are re-mapped (move drives, action acts, jump exits, toss = crane camera)
+    if (seated && !menu) {
+      if (a.wasPressed('jump')) this.exitMachine();
+      else {
+        if (a.wasPressed('action')) this.machines.pressAct(now);
+        if (a.wasPressed('toss')) this.machineCams.toggle();
+      }
+    } else if (!menu && a.wasPressed('jump')) this.controller.requestJump();
+    const nowSeated = this.machines.seated >= 0;
+    this.machines.update(dt, nowSeated && !menu ? a.move.x : 0, nowSeated && !menu ? a.move.y : 0, now);
 
-    this.physics.step(dt, (h) => this.controller.step(h, wish));
+    this.physics.step(dt, (h) => {
+      if (!nowSeated) this.controller.step(h, wish);
+    });
     if (this.controller.justJumped) {
       this.worker.jumped();
       this.sfx.play('jump');
@@ -415,10 +563,21 @@ export class Game extends GameShell {
       this.respawn();
     }
 
-    // interaction
-    this.target = held ? null : findTarget(this.controller.position, this.controller.facing, this.pieces.loose(), this.layout.racks);
-    if (!menu) {
-      if (!held && a.wasPressed('action')) {
+    // interaction ("Get in" comes before picking up)
+    this.machineTargetId = held || nowSeated ? -1 : this.nearestMachine();
+    this.target = held || nowSeated || this.machineTargetId >= 0 ? null : findTarget(this.controller.position, this.controller.facing, this.pieces.loose(), this.layout.racks);
+    if (nowSeated) {
+      const l = this.machines.label();
+      this.hud.setPrompt(l.text, 'E', l.disabled);
+      this.touch?.setMachineMode({ action: l.text, disabled: l.disabled, toss: this.machines.kindAt(this.machines.seated) === 'crane' ? 'Camera' : null });
+      this.machineHints.update(Math.abs(a.move.x) + Math.abs(a.move.y) > 0.1 || a.wasPressed('action'));
+    } else if (this.machineTargetId >= 0) this.hud.setPrompt(`Get in ${MACHINE_NAME[this.machines.kindAt(this.machineTargetId)]}`);
+    else this.hud.setPrompt(null);
+    if (!menu && !nowSeated && !seated) {
+      if (!held && a.wasPressed('action') && this.machineTargetId >= 0) {
+        this.enterMachine(this.machineTargetId);
+        this.armDrop = false;
+      } else if (!held && a.wasPressed('action')) {
         this.tryPickup();
         this.armDrop = false;
       } else if (held) {
@@ -443,18 +602,22 @@ export class Game extends GameShell {
     ghostMaterial.uniforms.uTime!.value += dt;
     this.cheerTimer = Math.max(0, this.cheerTimer - dt);
 
-    // worker visual
+    // worker visual (seated: in the cab)
     const alpha = this.physics.alpha;
     const pos = this.tmpV.lerpVectors(this.controller.prevPosition, this.controller.position, alpha);
+    const seat = this.machines.seat();
+    if (seat) pos.set(seat.x, seat.y, seat.z);
     this.worker.root.position.copy(pos);
-    this.worker.root.rotation.y = this.controller.facing;
-    const hs = this.controller.horizontalSpeed;
-    const pose = this.cheerTimer > 0 ? 'cheer' : !this.controller.grounded ? 'air' : hs > 4.2 ? 'run' : hs > 0.4 ? 'walk' : 'idle';
+    this.worker.root.rotation.y = seat ? seat.yaw : this.controller.facing;
+    const hs = seat ? 0 : this.controller.horizontalSpeed;
+    const pose = seat ? 'seated' : this.cheerTimer > 0 ? 'cheer' : !this.controller.grounded ? 'air' : hs > 4.2 ? 'run' : hs > 0.4 ? 'walk' : 'idle';
     const nowHeld = this.pieces.held();
     this.worker.update(dt, pose, hs, nowHeld ? PIECE_TYPES[nowHeld.type].carryPose : null);
 
-    this.camera.update(dt, pos);
+    if (seat && this.machineCams.active) this.machineCams.update(dt, this.ctx.camera, this.machines.states[this.machines.seated]!, this.layout.machines, a.move);
+    else this.camera.update(dt, pos);
     this.drawPieces();
+    this.updateMachineViews(dt, now);
 
     // target highlight
     if (this.target && !nowHeld) {
@@ -479,9 +642,39 @@ export class Game extends GameShell {
     a.endFrame();
   }
 
+  /** Groundwork pit, high-slot rings (lit while the hook would snap), the cue and engine sounds. */
+  private updateMachineViews(dt: number, now: number): void {
+    const pr = this.plot.progress;
+    const spots = this.layout.machines;
+    this.groundwork.update([{ active: !groundworkDone(pr), groundDug: pr.groundDug, groundPoured: pr.groundPoured, mixerBags: this.machines.mixerBags, mixerMixUntil: this.machines.mixerMixUntil ? Date.now() + (this.machines.mixerMixUntil - now) : 0 }], Date.now(), this.ctx.camera, this.controller.position);
+    const seatedCrane = this.machines.seated === 0;
+    this.highSlots.update(dt, [{ progress: this.plot.masterpiece ? null : pr, spots }], seatedCrane ? this.machines.snapSlot() : null);
+    this.cue.update(dt, 0, pr, (k) => this.machines.seated >= 0 && this.machines.kindAt(this.machines.seated) === k, (k) => {
+      const s = this.machines.states[['crane', 'excavator', 'forklift', 'mixer'].indexOf(k)]!;
+      return k === 'crane' ? { x: spots.crane.x, z: spots.crane.z, top: spots.crane.cabHeight + 0.8 } : { x: s.x, z: s.z, top: 2.3 };
+    });
+    const i = this.machines.seated;
+    if (i >= 0) {
+      const s = this.machines.states[i]!;
+      const a = this.actions;
+      const moving = Math.abs(a.move.x) > 0.1 || Math.abs(a.move.y) > 0.1;
+      const g = s.kind === 'crane' ? (moving || s.phase !== 'idle' ? 0.7 : 0) : s.kind === 'mixer' ? (this.machines.mixerMixUntil ? 0.85 : 0) : moving ? 0.85 : 0.45;
+      this.sfx.setLoop('solo-machine', ENGINE[s.kind], g);
+    } else this.sfx.setLoop('solo-machine', 'engine-diesel', 0);
+    void currentStage;
+  }
+
   private drawPieces(): void {
     const r = this.pieceRenderer;
     r.begin();
+    // feature 003: the four machines (hooked and pallet pieces go into this batch)
+    const spots = this.layout.machines;
+    const crane = this.machines.states[0]!;
+    const fork = this.machines.states[2]!;
+    this.machineRenderer.draw(
+      this.machines.states.map((s) => ({ pose: s, spots, hook: s === crane && crane.load.kind === 'hook' ? crane.load.piece : null, pallet: s === fork && fork.load.kind === 'pallet' ? fork.load.pieces : [] })),
+      this.ctx.camera.position, (t, m) => r.add(t, m), (t) => r.halfHeight.get(t) ?? 0.15,
+    );
     const m = new THREE.Matrix4();
     const q = new THREE.Quaternion();
     const s = new THREE.Vector3(1, 1, 1);

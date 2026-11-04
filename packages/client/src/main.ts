@@ -96,11 +96,13 @@ async function bootNet(b: Boot, mm: Matchmade): Promise<void> {
 }
 
 /** `?perf=crowd`: offline 100-worker + 12-tower scene for the perf budget check (no server). */
-async function bootCrowdPerf(b: Boot): Promise<void> {
+async function bootCrowdPerf(b: Boot, machines = false): Promise<void> {
   b.loading.message('Gathering the crowd…');
-  const [{ CrowdPerfScene }] = await Promise.all([import('./debug/crowdScene.ts'), loadCritical(b, 'net')]);
-  await Promise.all(CrowdPerfScene.WAIT_FOR.map((id) => b.assets.load(id)));
-  const scene = new CrowdPerfScene(b.ctx, b.assets, b.quality, b.hud);
+  const [{ CrowdPerfScene }, { MachinesPerfScene }] = await Promise.all([import('./debug/crowdScene.ts'), import('./debug/machinesScene.ts'), loadCritical(b, 'net')]);
+  // feature 003: `?perf=machines` = the crowd scene plus 48 machines posed mid-action
+  const Scene = machines ? MachinesPerfScene : CrowdPerfScene;
+  await Promise.all(Scene.WAIT_FOR.map((id) => b.assets.load(id)));
+  const scene = new Scene(b.ctx, b.assets, b.quality, b.hud);
   await scene.build();
   scene.showFps = params.has('debug');
   scene.start();
@@ -163,9 +165,9 @@ async function boot(): Promise<void> {
   const assets = new AssetStore(`${import.meta.env.BASE_URL}assets/`, { outlines: quality.outlines });
   const b: Boot = { loading, ctx, hud, quality, profile, assets };
   const manifest = assets.init();
-  if (params.get('perf') === 'crowd') {
+  if (params.get('perf') === 'crowd' || params.get('perf') === 'machines') {
     await manifest;
-    await bootCrowdPerf(b);
+    await bootCrowdPerf(b, params.get('perf') === 'machines');
     return;
   }
   if (soloRequested) {

@@ -8,7 +8,7 @@ export interface AnimState {
   flick: number;
 }
 
-export type CrowdPose = 'idle' | 'walk' | 'run' | 'air' | 'cheer' | 'wave' | 'dance' | 'point' | 'thumbsUp';
+export type CrowdPose = 'idle' | 'walk' | 'run' | 'air' | 'cheer' | 'wave' | 'dance' | 'point' | 'thumbsUp' | 'seated';
 
 export interface PartPose {
   legL: number;
@@ -83,6 +83,14 @@ export function animate(a: AnimState, dt: number, pose: CrowdPose, speed: number
       ar = -1.9;
       zr = -0.2;
       al = -0.2;
+      break;
+    case 'seated':
+      // feature 003: an operator in a cab — legs forward, hands on the controls
+      out.legL = out.legR = -1.35;
+      out.bob = 0;
+      al = ar = -1.15 + Math.sin(a.t * 3) * 0.04;
+      zl = 0.12;
+      zr = -0.12;
       break;
     default:
       break;

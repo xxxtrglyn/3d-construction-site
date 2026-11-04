@@ -1,4 +1,5 @@
 import express, { type Application, type Request, type Response } from 'express';
+import { PROTOCOL_VERSION } from '@hht/shared';
 import type { ServerContext } from '../context.ts';
 import { matchmake } from './matchmake.ts';
 
@@ -6,7 +7,7 @@ import { matchmake } from './matchmake.ts';
 export function mountRoutes(app: Application, ctx: ServerContext): void {
   app.use('/api', express.json({ limit: '1kb' }));
   app.get('/api/health', (_req: Request, res: Response) => {
-    res.json({ ok: true, protocol: 1, worlds: [...ctx.worlds.values()].sort((a, b) => a.worldId - b.worldId).map((w) => ({ worldId: w.worldId, players: w.sessions.size })) });
+    res.json({ ok: true, protocol: PROTOCOL_VERSION, worlds: [...ctx.worlds.values()].sort((a, b) => a.worldId - b.worldId).map((w) => ({ worldId: w.worldId, players: w.sessions.size })) });
   });
   app.get('/api/metrics', (_req: Request, res: Response) => {
     if (!ctx.cfg.metrics) {

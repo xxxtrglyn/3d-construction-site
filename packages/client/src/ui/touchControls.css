@@ -15,3 +15,6 @@
 .touch-btn.jump { background: #8ce04d; grid-column: 1; grid-row: 2; }
 .touch-btn.toss { background: #ff8cb8; grid-column: 2; grid-row: 1; }
 .touch-btn.hidden { visibility: hidden; }
+/* feature 003: a greyed machine action ("Move closer to the pit") */
+.touch-btn.disabled { filter: grayscale(.8); opacity: .7; }
+.touch-btn.action { font-size: 12px; line-height: 1.05; padding: 4px; }

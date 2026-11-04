@@ -14,6 +14,13 @@ const put = (p: Player, x: number, z: number, facing = 0) => {
   s.worker = { ...s.worker, x, z, facing };
 };
 const atForeman = (p: Player) => put(p, SITE.foreman.x, SITE.foreman.z + 1);
+/** feature 002 tests start at stage 1: finish Groundwork directly once the plot is assigned */
+const skipGroundwork = (plot = 0) => {
+  const sys = worldOf(server).systems;
+  const b = sys.plots[plot]!;
+  b.progress = { ...b.progress, groundDug: 6, groundPoured: 4 };
+  sys.syncPlot(plot);
+};
 /** Stand in the plot's build zone and drop `type` there. */
 const deliverTo = async (p: Player, plot: number, type: string) => {
   const d = SITE.plots[plot]!;
@@ -50,13 +57,18 @@ describe('Foreman and buildings', () => {
     atForeman(a);
     a.send('foreman', { op: 'start', blueprint: 'clock-tower' });
     await a.waitFor('foreman');
-    // stages 1–5 through the dev cheat (the action rate limit is 5/s), the bell delivered for real
+    skipGroundwork();
+    // stages 1–5 through the dev cheat (the action rate limit is 5/s); the bell is a high slot (feature 003):
+    // by hand it is refused, then the dev cheat fills it through the crane path
     for (let st = 0; st < 5; st++) {
       await sleep(550); // admin rate limit: 2/s
       a.send('dev', { op: 'fillStage', plot: 0 });
       await until(() => worldOf(server).state.plots[0]!.completedStages === st + 1);
     }
     await deliverTo(a, 0, CLOCK_TOWER.stages[5]!.pieceType);
+    expect(await a.waitFor('hint', (h) => h.kind === 'tooHigh')).toEqual({ kind: 'tooHigh' });
+    await sleep(550);
+    a.send('dev', { op: 'fillStage', plot: 0 });
     await b.waitFor('snap', (e) => e.result === 'masterpiece');
     const cel = await b.waitFor('celebrate');
     expect(cel.plot).toBe(0);
@@ -79,6 +91,7 @@ describe('Foreman and buildings', () => {
     atForeman(a);
     a.send('foreman', { op: 'start', blueprint: 'clock-tower' });
     await a.waitFor('foreman');
+    skipGroundwork();
     await deliverTo(a, 0, 'bell');
     const h = await a.waitFor('hint');
     expect(h).toEqual({ kind: 'wrongPiece', needed: 'beam' });
@@ -98,6 +111,7 @@ describe('Foreman and buildings', () => {
     atForeman(a);
     a.send('foreman', { op: 'start', blueprint: 'clock-tower' });
     await a.waitFor('foreman');
+    skipGroundwork();
     for (let i = 0; i < 5; i++) {
       await deliverTo(a, 0, 'beam');
       await sleep(150);
@@ -120,6 +134,7 @@ describe('Foreman and buildings', () => {
     atForeman(a);
     a.send('foreman', { op: 'start', blueprint: 'clock-tower' });
     await a.waitFor('foreman');
+    skipGroundwork();
     await deliverTo(b, 0, 'beam');
     await sleep(100);
     expect(worldOf(server).state.plots[0]!.filledSlots).toBe(0);
@@ -133,6 +148,7 @@ describe('Foreman and buildings', () => {
     atForeman(a);
     a.send('foreman', { op: 'start', blueprint: 'clock-tower' });
     await a.waitFor('foreman');
+    skipGroundwork();
     await deliverTo(a, 0, 'beam');
     await until(() => worldOf(server).state.plots[0]!.filledSlots === 1);
     const row = server.ctx.db.sql.prepare('SELECT filled_slots, state, join_mode FROM building WHERE world_id = 1 AND plot_index = 0').get() as Record<string, unknown>;

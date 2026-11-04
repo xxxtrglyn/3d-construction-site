@@ -12,6 +12,8 @@ export const PlayerState = schema(
     /** '' | 'host' | 'member' */
     crewRole: t.string(),
     away: t.boolean(),
+    /** feature 003: the MachineId this player operates, or -1 */
+    machine: t.int8().default(-1),
   },
   'PlayerState',
 );
@@ -30,6 +32,19 @@ export const PlotState = schema(
     crewSize: t.uint8(),
     bin: t.array('string'),
     finishedAt: t.float64(),
+    // feature 003 (contracts/network-protocol-v2.md §4)
+    groundDug: t.uint8(),
+    groundPoured: t.uint8(),
+    highFilled: t.uint8(),
+    mixerBags: t.uint8(),
+    /** server epoch ms until which the mixer drum turns (0 = idle) */
+    mixerMixUntil: t.float64(),
+    /** operator session id per machine, kind order crane, excavator, forklift, mixer ('' = free) */
+    machineOps: t.array('string'),
+    /** '' or the PieceTypeId on the crane hook */
+    hookType: t.string(),
+    /** PieceTypeIds on the forklift pallet (0..4 of one type) */
+    palletTypes: t.array('string'),
   },
   'PlotState',
 );
@@ -38,7 +53,7 @@ export type PlotState = SchemaType<typeof PlotState>;
 export const PieceState = schema(
   {
     type: t.string(),
-    /** 'loose' | 'flying' */
+    /** 'loose' | 'flying' (hooked and pallet pieces are not in the schema: research M10) */
     state: t.string(),
     x: t.float32(),
     y: t.float32(),

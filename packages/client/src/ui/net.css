@@ -30,6 +30,14 @@
 .net-panel .seg { display: flex; gap: 6px; }
 .net-prompt { position: fixed; left: 50%; bottom: max(110px, calc(env(safe-area-inset-bottom) + 100px)); transform: translateX(-50%); padding: 6px 14px; border-radius: 14px; background: rgba(255, 247, 230, .95); border: 3px solid #2a1a1a; font-weight: 800; pointer-events: none; white-space: nowrap; }
 .net-prompt.hidden { display: none; }
+.net-prompt.disabled { opacity: .62; background: rgba(235, 232, 226, .95); }
+.net-prompt .sub { font-weight: 700; opacity: .7; margin-left: 6px; }
+.machine-hint { position: fixed; left: 50%; top: max(70px, calc(env(safe-area-inset-top) + 64px)); transform: translateX(-50%); max-width: min(92vw, 420px); padding: 10px 16px; border-radius: 16px; background: rgba(255, 247, 230, .97); border: 3px solid #2a1a1a; font-weight: 700; font-size: 14px; line-height: 1.45; pointer-events: none; text-align: left; }
+.machine-hint.hidden { display: none; }
+.machine-hint b { font-weight: 900; }
+.machine-hint .title { font-weight: 900; font-size: 16px; margin-bottom: 4px; }
+.machine-hint kbd { display: inline-block; min-width: 18px; padding: 0 4px; margin: 0 2px; border: 2px solid #2a1a1a; border-radius: 5px; background: #ffcc2e; font: 900 12px/16px inherit; text-align: center; }
+.machine-bags { font-weight: 900; font-size: 13px; padding: 2px 8px; border-radius: 10px; background: rgba(255, 247, 230, .95); border: 2px solid #2a1a1a; }
 .net-prompt kbd { display: inline-block; min-width: 20px; padding: 0 5px; margin-right: 6px; border: 2px solid #2a1a1a; border-radius: 6px; background: #ffcc2e; font: 900 13px/18px inherit; text-align: center; }
 .plotlbl { gap: 2px; }
 .plotlbl .tag { font-size: 12px; }

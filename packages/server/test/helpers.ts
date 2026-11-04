@@ -59,7 +59,7 @@ export async function joinPlayer(server: RunningServer, opts: JoinOpts = {}): Pr
     events, snaps, bytesIn: 0, closedWith: null, seq: 1,
     send: (type, payload = {}) => room.send(type, payload),
     move(inputs) {
-      const full = inputs.map((i) => ({ seq: p.seq++ & 0xffff, dx: 0, dz: 0, run: false, jump: false, ...i }));
+      const full = inputs.map((i) => ({ seq: p.seq++ & 0xffff, dx: 0, dz: 0, run: false, jump: false, act: false, alt: false, ...i }));
       for (let k = 0; k < full.length; k += 12) room.sendBytes('in', encodeMoveInputs(full.slice(k, k + 12)));
     },
     waitFor(type, pred = () => true, timeoutMs = 5000) {

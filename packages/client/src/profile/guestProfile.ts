@@ -1,4 +1,4 @@
-import { generateName, isHatColorId, isValidGuestName, randomHatColor, type HatColorId, type Rng } from '@hht/shared';
+import { generateName, isHatColorId, isValidGuestName, randomHatColor, type HatColorId, type MachineKind, type Rng } from '@hht/shared';
 
 export const PROFILE_KEY = 'hht.profile.v2';
 export const LEGACY_PROFILE_KEY = 'hht.profile.v1';
@@ -17,6 +17,8 @@ export interface GuestProfile {
   lastWorld: number | null;
   /** hide all typed chat (FR-064) */
   hideAllChat: boolean;
+  /** feature 003: machine kinds whose control hint card this device has seen (optional: older profiles lack it) */
+  seenMachineHints?: MachineKind[];
 }
 
 export interface StorageLike {

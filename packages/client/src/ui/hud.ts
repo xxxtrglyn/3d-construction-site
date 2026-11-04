@@ -2,9 +2,10 @@ import * as THREE from 'three';
 import { PIECE_TYPES, type PieceTypeId } from '@hht/shared';
 import { PALETTE } from '../render/palette.gen.ts';
 import './hud.css';
+import './net.css';
 
 const PIECE_COLOR: Record<PieceTypeId, string> = {
-  beam: 'beam', brick: 'brick', panel: 'teal', paint: 'purple', decor: 'pink', bell: 'gold', cone: 'orange',
+  beam: 'beam', brick: 'brick', panel: 'teal', paint: 'purple', decor: 'pink', bell: 'gold', cone: 'orange', cement: 'concrete', concrete: 'stone',
 };
 
 const css = (rgb: readonly number[] | undefined): string =>
@@ -30,6 +31,8 @@ export class Hud {
   private readonly muteBtn: HTMLButtonElement;
   private readonly celebrate: HTMLDivElement;
   private readonly fps: HTMLDivElement;
+  private readonly prompt: HTMLDivElement;
+  private promptText = '';
   private toastTimer = 0;
   private readonly v = new THREE.Vector3();
   menuOpen = false;
@@ -93,6 +96,23 @@ export class Hud {
     btn('🔁  Build again', this.celebrate, () => handlers.onBuildAgain());
     this.fps = div('hud-fps');
     this.fps.style.display = 'none';
+    this.prompt = div('net-prompt hidden');
+  }
+
+  /** feature 003: the action prompt ("Get in the crane", greyed "Move closer to the pit"). */
+  setPrompt(text: string | null, key = 'E', disabled = false): void {
+    const t = text ? `${key}|${disabled ? 1 : 0}|${text}` : '';
+    if (t === this.promptText) return;
+    this.promptText = t;
+    this.prompt.classList.toggle('hidden', !text);
+    this.prompt.classList.toggle('disabled', disabled);
+    if (text) this.prompt.innerHTML = `<kbd>${key}</kbd>${text}`;
+  }
+
+  /** feature 003: a free-text "what next" line (Groundwork, crane steps). */
+  setNeedText(html: string): void {
+    this.need.style.visibility = '';
+    this.need.innerHTML = `<span>${html}</span>`;
   }
 
   private onMenu: (open: boolean) => void;

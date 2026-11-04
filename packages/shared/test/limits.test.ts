@@ -13,6 +13,17 @@ describe('rate limits', () => {
     for (let t = 0; t <= 1000; t += 50) for (let k = 0; k < 6; k++) if (take(move, t)) ok++;
     expect(ok).toBeLessThanOrEqual(60 + 12 + 1);
   });
+  it('machine intents: burst 6, then 2 per second', () => {
+    const b = bucketFor('machine', 0);
+    for (let i = 0; i < 6; i++) expect(take(b, 0)).toBe(true);
+    expect(take(b, 0)).toBe(false);
+    expect(take(b, 400)).toBe(false); // 0.8 token
+    expect(take(b, 500)).toBe(true);
+    let ok = 0;
+    for (let t = 1000; t <= 11_000; t += 10) if (take(b, t)) ok++;
+    expect(ok).toBeGreaterThanOrEqual(19);
+    expect(ok).toBeLessThanOrEqual(21);
+  });
   it('counts strikes within a 10 s window', () => {
     const w = { times: [] as number[] };
     for (let i = 0; i < 29; i++) addStrike(w, i * 100);

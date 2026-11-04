@@ -12,7 +12,12 @@ async function hostAPlot(p: Page): Promise<number> {
   await p.waitForTimeout(400);
   await send(p, 'foreman', { op: 'start', blueprint: 'clock-tower' });
   await expect.poll(async () => (await me(p)).crew?.role, { timeout: 8000 }).toBe('host');
-  return (await me(p)).crew!.plot;
+  const plot = (await me(p)).crew!.plot;
+  // feature 003: these 002 flows start at stage 1 (Groundwork is covered by mp-machines.spec.ts)
+  await p.waitForTimeout(550);
+  await dev(p, 'fillGround', plot);
+  await expect.poll(async () => ((await plots(p))[plot] as { groundPoured?: number } | undefined)?.groundPoured, { timeout: 5000 }).toBe(4);
+  return plot;
 }
 
 async function askAtSign(p: Page, plot: number): Promise<void> {

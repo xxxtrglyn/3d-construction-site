@@ -30,6 +30,19 @@ export function applyShot(game: Game, shot: string): void {
         }
       });
     }
+  } else if (shot === 'machines') {
+    // feature 003: the solo plot with its 4 machines, framed like assets/renders/machines-plot.png
+    const go = (): void => freeze(new THREE.Vector3(c.x + 17, 19, c.z + 21), new THREE.Vector3(c.x, 5.5, c.z - 2.5));
+    const need = ['machine-crane', 'machine-excavator', 'machine-forklift', 'machine-mixer'];
+    if (need.every((id) => game.assets.get(id))) go();
+    else {
+      const off = game.assets.onLoaded(() => {
+        if (need.every((id) => game.assets.get(id))) {
+          off();
+          go();
+        }
+      });
+    }
   } else if (shot === 'overview') {
     freeze(new THREE.Vector3(14, 16, 18), new THREE.Vector3(0, 0, -1));
   }

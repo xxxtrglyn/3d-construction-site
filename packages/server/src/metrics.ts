@@ -39,6 +39,9 @@ export interface WorldMetrics {
   /** per-second samples of the average bytes sent per client */
   bytesPerClientPerS: Ring;
   ticks: Ring;
+  /** feature 003: machine-record bytes per client per second, and the running count this second */
+  machineBytesPerClientPerS: Ring;
+  machineBytesAcc: number;
 }
 
 /** Process-wide metrics: event-loop delay, GC pauses, heap; plus per-world rings. */
@@ -70,7 +73,7 @@ export class Metrics {
 
   world(worldId: number, players: () => number): WorldMetrics {
     // 24 000 samples = 20 min of 20 Hz ticks (load tests read the whole run)
-    const m: WorldMetrics = { worldId, players, tickMs: new Ring(24_000), encodeMs: new Ring(24_000), sqliteMs: new Ring(24_000), bytesPerClientPerS: new Ring(1200), ticks: new Ring(1200) };
+    const m: WorldMetrics = { worldId, players, tickMs: new Ring(24_000), encodeMs: new Ring(24_000), sqliteMs: new Ring(24_000), bytesPerClientPerS: new Ring(1200), ticks: new Ring(1200), machineBytesPerClientPerS: new Ring(1200), machineBytesAcc: 0 };
     this.worlds.set(worldId, m);
     return m;
   }
@@ -93,6 +96,7 @@ export class Metrics {
         encodeMs: w.encodeMs.stats(),
         sqliteMs: w.sqliteMs.stats(),
         bytesPerClientPerS: w.bytesPerClientPerS.stats(),
+        machineBytesPerClientPerS: w.machineBytesPerClientPerS.stats(),
         ticksPerS: w.ticks.stats(),
       })),
       eventLoopDelayMs: { p50: ms(this.eld.percentile(50)), p99: ms(this.eld.percentile(99)), max: ms(this.eld.max) },

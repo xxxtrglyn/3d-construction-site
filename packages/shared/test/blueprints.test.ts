@@ -31,6 +31,14 @@ describe('validateBlueprint', () => {
   it('rejects cones as slot pieces', () => {
     expect(validateBlueprint(mutate((s) => { s[0]!.pieceType = 'cone'; }))).toContainEqual(expect.stringContaining('cannot fill'));
   });
+  it('has 4 high slots (3 roof + the bell) and 6 scoops / 4 concrete of Groundwork', () => {
+    expect(CLOCK_TOWER.stages.map((s) => s.highSlots)).toEqual([0, 0, 3, 0, 0, 1]);
+    expect(CLOCK_TOWER.groundwork).toEqual({ scoops: 6, concrete: 4 });
+  });
+  it('rejects more high slots than slots', () => {
+    expect(validateBlueprint(mutate((s) => { s[5]!.highSlots = 2; }))).toContainEqual(expect.stringContaining('highSlots'));
+    expect(validateBlueprint(mutate((s) => { s[2]!.highSlots = -1; }))).toContainEqual(expect.stringContaining('highSlots'));
+  });
   it('rejects decreasing or excessive stars', () => {
     expect(validateBlueprint(mutate((s) => { s[3]!.starsAfter = 1; }))).toContainEqual(expect.stringContaining('decrease'));
     expect(validateBlueprint(mutate((s) => { s[5]!.starsAfter = 6; }))).toContainEqual(expect.stringContaining('capped'));

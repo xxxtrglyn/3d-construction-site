@@ -1,5 +1,6 @@
-"""The floating construction lot (24 x 24 m) with yard, trees, rocks, spawn pad, edge rails and
-static scenery machines (excavator + small tower crane from the approved art test).
+"""The floating construction lot (24 x 24 m) with yard, trees, rocks, spawn pad and edge rails.
+Feature 003: the static scenery machines are gone; the operable machines park at empties M_* around
+the single plot (read by packages/client/src/world/layout.ts → MachineSpots), plus a cement rack.
 
 Origin = lot center, ground level z = 0 (top of the dirt yard). Front edge = -Y.
 """
@@ -8,6 +9,7 @@ import random
 
 from mathutils import Vector
 
+from . import site_layout as SL
 from .common import D, beam, empty, glow, new_obj, squircle_slab, toon
 from .racks import RACK_COLORS, _rack
 
@@ -20,8 +22,74 @@ SPAWN = (0.0, -7.5)
 RACKS = {  # type: (x, y, rotz deg) — racks face the yard center
     'beam': (-7.0, -3.0, -90), 'brick': (-7.0, 0.2, -90), 'panel': (-7.0, 3.4, -90),
     'paint': (7.0, -3.0, 90), 'decor': (7.0, 0.2, 90), 'bell': (7.0, 3.4, 90),
+    'cement': (-7.0, 6.6, -90),  # feature 003
 }
 CONE_PILE = (-3.2, -6.0)
+PLAY_HALF = 11.3  # mirrors packages/client/src/world/layout.ts
+
+# feature 003: machine spots around the single plot, plot-local (front = -Y = toward the spawn)
+SOLO_YARD_RADIUS = 6.5
+SOLO_SPOTS = {
+    'crane': (0.0, 4.0), 'spoil': (-3.5, 3.8), 'hook_pad': (3.6, 3.1), 'mixer': (-4.6, 6.3),
+    'excavator': (4.2, -1.5), 'forklift': (3.4, -7.1),
+}
+MACHINE_EMPTIES = (['M_Pit', 'M_Spoil', 'M_HookPad', 'M_Crane', 'M_Mixer', 'M_Mixer_Hopper', 'M_Mixer_Chute', 'M_Park_excavator', 'M_Park_forklift']
+                   + [f'M_HighSlot_{st}_{i}' for st, pts in SL.HIGH_SLOTS.items() for i in range(len(pts))])
+
+
+def _solo_machine_empties(L):
+    """Empties the client turns into MachineSpots (positions; rotation Z = three.js yaw of the pose)."""
+    px, py = TOWER_PLOT
+    S = SOLO_SPOTS
+    at = lambda k: (px + S[k][0], py + S[k][1])  # noqa: E731
+
+    def heading(frm, to):
+        return math.atan2(to[0] - frm[0], -(to[1] - frm[1]))  # three.js yaw (forward = (sin, cos) in x/z)
+
+    def put(name, xy, yaw=0.0, z=0.0):
+        e = empty(name, loc=(xy[0], xy[1], z), parent=L)
+        e.rotation_euler = (0, 0, yaw)
+        return e
+
+    put('M_Pit', (px, py))
+    put('M_Spoil', at('spoil'))
+    put('M_HookPad', at('hook_pad'))
+    put('M_Crane', at('crane'), heading(at('crane'), (px, py)))
+    m = at('mixer')
+    mdx, mdy = px - m[0], py - m[1]
+    ml = math.hypot(mdx, mdy)
+    mdx, mdy = mdx / ml, mdy / ml
+    put('M_Mixer', m, heading(m, (px, py)))
+    put('M_Mixer_Hopper', (m[0] - mdx * SL.MIXER_HOPPER, m[1] - mdy * SL.MIXER_HOPPER))
+    put('M_Mixer_Chute', (m[0] + mdx * SL.MIXER_CHUTE, m[1] + mdy * SL.MIXER_CHUTE))
+    put('M_Park_excavator', at('excavator'), heading(at('excavator'), at('crane')))
+    put('M_Park_forklift', at('forklift'), heading(at('forklift'), SPAWN))
+    for st, pts in SL.HIGH_SLOTS.items():
+        for i, (lx, ly, z) in enumerate(pts):
+            put(f'M_HighSlot_{st}_{i}', (px + lx, py + ly), 0.0, z)
+    _check_solo_spots()
+
+
+def _check_solo_spots():
+    """The machine spots fit on the lot without blocking the racks or the spawn path (FR-043)."""
+    px, py = TOWER_PLOT
+    radius = {'crane': 0.75, 'spoil': SL.SPOIL_RADIUS, 'hook_pad': SL.HOOK_PAD_HALF * math.sqrt(2), 'mixer': 1.4, 'excavator': 1.1, 'forklift': 0.9}
+    for k, (lx, ly) in SOLO_SPOTS.items():
+        x, y, r = px + lx, py + ly, radius[k]
+        assert abs(x) + r <= PLAY_HALF and abs(y) + r <= PLAY_HALF, f'solo {k} leaves the lot'
+        for rk, (rx, ry, _) in RACKS.items():
+            # racks are 1.7 x 1.1; keep 1.0 m in front of them free for the worker
+            assert math.hypot(x - rx, y - ry) >= r + 1.2, f'solo {k} blocks the {rk} rack'
+        assert abs(x - SPAWN[0]) >= r + 0.6 or y - r > py - L_HALF_PATH or y + r < SPAWN[1], f'solo {k} blocks the spawn path'
+        if k in ('spoil', 'hook_pad', 'excavator', 'crane'):
+            assert math.hypot(lx, ly) + (r if k != 'hook_pad' else 0) <= SOLO_YARD_RADIUS + 1e-6, f'solo {k} leaves the yard'
+    pad = SOLO_SPOTS['hook_pad']
+    cr = SOLO_SPOTS['crane']
+    assert SL.CRANE_REACH[0] <= math.hypot(pad[0] - cr[0], pad[1] - cr[1]) <= SL.CRANE_REACH[1], 'solo crane cannot reach its pad'
+    assert math.hypot(*pad) - SL.HOOK_PAD_HALF >= SL.BUILD_ZONE_RADIUS, 'solo hook pad overlaps the build zone'
+
+
+L_HALF_PATH = 1.0
 
 
 def _tree(root, loc, s):
@@ -29,61 +97,6 @@ def _tree(root, loc, s):
     beam((0, 0, 0), (0, 0, 0.9 * s), 0.1 * s, toon('trunk'), 'Trunk', parent=T)
     new_obj('ico', 'Leaf', loc=(0, 0, 1.3 * s), scale=(0.65 * s,) * 3, mat=toon('leaf'), parent=T, subdivisions=2)
     new_obj('ico', 'Leaf2', loc=(0.3 * s, 0.15 * s, 1.0 * s), scale=(0.42 * s,) * 3, mat=toon('leaf'), parent=T, subdivisions=2)
-
-
-def _excavator(root, loc, rotz):
-    E = empty('Excavator', loc=loc, parent=root)
-    E.rotation_euler = (0, 0, math.radians(rotz))
-    for sy in (-1, 1):
-        new_obj('cube', 'Track', loc=(0, 0.42 * sy, 0.17), scale=D(1.3, 0.32, 0.34), mat=toon('dark'), bevel=0.13, seg=4, parent=E)
-        for x in (-0.4, 0, 0.4):
-            new_obj('cyl', 'Wheel', loc=(x, 0.585 * sy, 0.17), rot=(math.pi / 2, 0, 0), scale=(0.1, 0.1, 0.01), mat=toon('steel'), smooth='angle', parent=E, vertices=12)
-    new_obj('cyl', 'Turntable', loc=(0, 0, 0.39), scale=(0.38, 0.38, 0.05), mat=toon('steel'), smooth='angle', parent=E, vertices=20)
-    new_obj('cube', 'Body', loc=(-0.1, 0, 0.6), scale=D(1.0, 0.9, 0.35), mat=toon('yellow'), bevel=0.1, parent=E)
-    new_obj('cube', 'Counterweight', loc=(-0.56, 0, 0.62), scale=D(0.3, 0.86, 0.36), mat=toon('dark'), bevel=0.12, parent=E)
-    new_obj('cube', 'Cab', loc=(0.1, 0.2, 1.02), scale=D(0.5, 0.45, 0.52), mat=toon('yellow'), bevel=0.08, parent=E)
-    new_obj('cube', 'WinFront', loc=(0.35, 0.2, 1.07), scale=D(0.04, 0.34, 0.3), mat=toon('glass'), parent=E)
-    new_obj('cube', 'WinSide', loc=(0.1, 0.425, 1.07), scale=D(0.34, 0.04, 0.3), mat=toon('glass'), parent=E)
-    new_obj('sphere', 'Beacon', loc=(0.1, 0.2, 1.32), scale=(0.07, 0.07, 0.06), mat=toon('orange'), smooth='all', parent=E, segments=12, ring_count=8)
-    beam((0.35, -0.15, 0.72), (1.0, -0.15, 1.52), 0.1, toon('yellow'), 'Boom', parent=E, square=True)
-    beam((1.0, -0.15, 1.52), (1.45, -0.15, 0.62), 0.08, toon('yellow'), 'Stick', parent=E, square=True)
-    new_obj('cube', 'Bucket', loc=(1.47, -0.15, 0.48), rot=(0, math.radians(-25), 0), scale=D(0.3, 0.34, 0.26), mat=toon('dark'), bevel=0.06, parent=E)
-    E.scale = (1.4, 1.4, 1.4)
-
-
-def _crane(root, loc):
-    C = empty('Crane', loc=loc, parent=root)
-    y = toon('yellow')
-    new_obj('cube', 'Footing', loc=(0, 0, 0.1), scale=D(0.85, 0.85, 0.2), mat=toon('concrete'), bevel=0.04, parent=C)
-    w, H, segs = 0.2, 4.2, 7
-    corners = [(-w, -w), (w, -w), (w, w), (-w, w)]
-    for dx, dy in corners:
-        beam((dx, dy, 0.2), (dx, dy, 0.2 + H), 0.03, y, 'Post', parent=C, vertices=6)
-    sh = H / segs
-    for i in range(segs):
-        z0, z1 = 0.2 + i * sh, 0.2 + (i + 1) * sh
-        for k in range(4):
-            a, b = corners[k], corners[(k + 1) % 4]
-            p, q = ((a[0], a[1], z0), (b[0], b[1], z1)) if i % 2 == 0 else ((b[0], b[1], z0), (a[0], a[1], z1))
-            beam(p, q, 0.016, y, 'Brace', parent=C, vertices=6)
-    top = 0.2 + H
-    new_obj('cube', 'Slew', loc=(0, 0, top + 0.06), scale=D(0.5, 0.5, 0.12), mat=toon('dark'), bevel=0.03, parent=C)
-    new_obj('cube', 'Cab', loc=(0.2, -0.32, top + 0.28), scale=D(0.36, 0.3, 0.32), mat=y, bevel=0.06, parent=C)
-    jz, jt = top + 0.2, top + 0.5
-    for sy in (-1, 1):
-        beam((-0.95, 0.13 * sy, jz), (3.2, 0.13 * sy, jz), 0.022, y, 'JibChord', parent=C, vertices=6)
-    beam((0, 0, jt), (3.2, 0, jt), 0.022, y, 'JibTop', parent=C, vertices=6)
-    for i in range(8):
-        xa, xb = 3.2 * i / 8, 3.2 * (i + 1) / 8
-        for sy in (-1, 1):
-            beam((xa, 0.13 * sy, jz), (xb, 0, jt), 0.012, y, 'JibBrace', parent=C, vertices=6)
-    new_obj('cube', 'Counterweight', loc=(-0.75, 0, jz - 0.12), scale=D(0.35, 0.38, 0.32), mat=toon('concrete'), bevel=0.04, parent=C)
-    beam((2.5, 0, jz - 0.1), (2.5, 0, 2.6), 0.006, toon('dark'), 'Cable', parent=C, vertices=4)
-    new_obj('cube', 'Hook', loc=(2.5, 0, 2.55), scale=D(0.16, 0.14, 0.16), mat=y, bevel=0.03, parent=C)
-    new_obj('cube', 'Load', loc=(2.5, 0, 2.1), scale=D(1.2, 0.14, 0.12), mat=toon('beam'), bevel=0.02, parent=C)
-    beam((2.5, 0, 2.47), (2.0, 0, 2.16), 0.004, toon('dark'), 'Sling', parent=C, vertices=4)
-    beam((2.5, 0, 2.47), (3.0, 0, 2.16), 0.004, toon('dark'), 'Sling', parent=C, vertices=4)
-    C.rotation_euler = (0, 0, math.radians(-35))
 
 
 def build():
@@ -141,10 +154,13 @@ def build():
             new_obj('cone', 'Tuft', loc=(x + random.uniform(-0.1, 0.1), y + random.uniform(-0.1, 0.1), -0.03),
                     rot=(random.uniform(-0.3, 0.3), random.uniform(-0.3, 0.3), 0), mat=toon('grass2'), parent=L,
                     vertices=5, radius1=0.06, radius2=0.0, depth=random.uniform(0.2, 0.34))
-    # dirt mound + static machines (scenery)
     new_obj('sphere', 'Mound', loc=(7.6, 6.4, 0), scale=(1.5, 1.2, 0.7), mat=toon('mound'), smooth='all', parent=L, segments=20, ring_count=10)
-    _excavator(L, (9.6, 5.0, 0), 160)
-    _crane(L, (-9.0, 8.6, 0))
+    # feature 003: the static crane and excavator made way for the operable machines,
+    # the pit outline, the spoil heap, the hook pad and the parking marks
+    from .machines import groundwork_marks
+    S = SOLO_SPOTS
+    groundwork_marks(L, TOWER_PLOT, 0.0, spoil=S['spoil'], pad=S['hook_pad'], parks=(S['excavator'], S['forklift']))
+    _solo_machine_empties(L)
     # tiny lamp on the spawn pad sign
     beam((1.6, -7.5, 0), (1.6, -7.5, 1.4), 0.04, toon('dark'), 'SpawnSignPost', parent=L)
     new_obj('cube', 'SpawnSign', loc=(1.6, -7.53, 1.25), scale=D(0.9, 0.06, 0.4), mat=toon('yellow'), bevel=0.03, parent=L)

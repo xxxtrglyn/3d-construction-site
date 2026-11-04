@@ -11,7 +11,8 @@ from mathutils import Vector
 
 from . import site_layout as L
 from .common import D, beam, empty, glow, new_obj, toon
-from .lot import _crane, _excavator, _tree
+from .lot import _tree
+from .machines import groundwork_marks
 from .racks import RACK_COLORS
 
 
@@ -84,7 +85,7 @@ def build():
     for k, ad in enumerate(L.YARD_ANGLES_DEG):
         a = math.radians(ad)
         yx, yy = L.YARD_RING * math.cos(a), L.YARD_RING * math.sin(a)
-        _pad(f'YardPad_{k}', yx, yy, L.YARD_RACK_RADIUS + 1.6, toon('dirt'), S, h=0.025)
+        _pad(f'YardPad_{k}', yx, yy, L.YARD_RACK_RADIUS + 1.0, toon('dirt'), S, h=0.025)
     for i, r in enumerate(L.rack_defs()):
         x, y = r['pos']
         if r['type'] == 'cone':
@@ -108,12 +109,9 @@ def build():
     # trees, machines, rocks and grass tufts
     for (x, y, s) in L.TREES:
         _tree(S, (x, y, -0.02), s)
-    for name, rr, ad, rotd in L.MACHINES:
-        x, y = rr * math.cos(math.radians(ad)), rr * math.sin(math.radians(ad))
-        if name == 'excavator':
-            _excavator(S, (x, y, 0), rotd)
-        else:
-            _crane(S, (x, y, 0))
+    # feature 003: no static machines (FR-005); every plot gets its pit outline, spoil-heap base, hook pad and parking marks
+    for p in L.plot_defs():
+        groundwork_marks(S, p['center'], p['rot'])
     new_obj('sphere', 'Mound', loc=(L.MOUND[0], L.MOUND[1], 0), scale=(L.MOUND[2], L.MOUND[3], L.MOUND[4]), mat=toon('mound'), smooth='all', parent=S, segments=16, ring_count=8)
 
     occupied = [p['center'] for p in L.plot_defs()]

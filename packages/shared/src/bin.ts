@@ -9,9 +9,13 @@ export interface BinEntry {
   donorPid: string | null;
 }
 
-/** Bins accept building pieces the blueprint uses (never cones). */
+/**
+ * Bins accept building pieces the blueprint uses, and cement bags (feature 003). Never cones, and never
+ * concrete buckets: those exist only as mixer output for the crew (FR-020).
+ */
 export function canBin(type: PieceTypeId, bp: Blueprint): boolean {
-  return bp.stages.some((s) => s.pieceType === type);
+  if (type === 'concrete') return false;
+  return type === 'cement' || bp.stages.some((s) => s.pieceType === type);
 }
 
 /** Adds `e` when there is room ("up to 10 pieces"). */

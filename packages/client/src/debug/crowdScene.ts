@@ -25,15 +25,15 @@ const POSES = ['idle', 'walk', 'run', 'air', 'cheer', 'wave'] as const;
  * celebration, nameplates and emote bubbles; fixed hero camera over the plaza.
  */
 export class CrowdPerfScene extends GameShell {
-  private readonly assets: AssetStore;
+  protected readonly assets: AssetStore;
   private readonly hudRoot: HTMLElement;
-  private world!: NetWorld;
+  protected world!: NetWorld;
   private crowd!: CrowdRenderer;
   private pieces!: PieceRenderer;
   private labels!: LabelLayer;
   private readonly buffers: EntityBuffer[] = [];
   private readonly walkers: Array<{ cx: number; cz: number; r: number; w: number; phase: number; carry: PieceTypeId | null; hat: string; anim: number }> = [];
-  private readonly state: WorldView;
+  protected readonly state: WorldView;
   private readonly players = new Map<string, PlayerView>();
   private serverNow = 0;
   private snapAcc = 0;
@@ -49,6 +49,8 @@ export class CrowdPerfScene extends GameShell {
     const plots: PlotView[] = stages.map((s, i) => ({
       state: s === 6 ? 'finished' : 'building', blueprintId: CLOCK_TOWER.id, completedStages: s, filledSlots: s === 6 ? 0 : 1,
       hostName: `Host ${i + 1}`, hostSession: `h${i}`, joinMode: 'ask', crewSize: 1 + (i % 8), bin: Array.from({ length: i % 4 }, () => 'brick'), finishedAt: 0,
+      groundDug: s === 0 ? 3 : 6, groundPoured: s === 0 ? 0 : 4, highFilled: 0, mixerBags: s === 0 ? 2 : 0, mixerMixUntil: 0,
+      machineOps: ['', '', '', ''], hookType: '', palletTypes: [],
     }));
     const pieces = new Map<string, PieceView>();
     this.state = { worldId: 1, shift: { epoch: 1, endsAt: Date.now() + 3_600_000, towersCompleted: 4, phase: 'running' }, players: this.players, plots, pieces };
@@ -80,7 +82,7 @@ export class CrowdPerfScene extends GameShell {
         hat: HAT_COLORS[HAT_COLOR_IDS[i % HAT_COLOR_IDS.length]!], anim: i % 9 === 0 ? ANIM.emote : rng() < 0.6 ? ANIM.walk : ANIM.run,
       });
       this.buffers.push(new EntityBuffer());
-      this.players.set(`p${i}`, { netId: i + 1, name: `Worker ${i + 1}`, hatColor: 'yellow', heldType: '', crewPlot: i % 13 === 0 ? i % 12 : -1, crewRole: '', away: false });
+      this.players.set(`p${i}`, { netId: i + 1, name: `Worker ${i + 1}`, hatColor: 'yellow', heldType: '', crewPlot: i % 13 === 0 ? i % 12 : -1, crewRole: '', away: false, machine: -1 });
     }
     if (this.quality.bloom) this.bloom = new Bloom(this.ctx.renderer, scene, camera);
     camera.position.set(4, 13, 21);
@@ -136,9 +138,13 @@ export class CrowdPerfScene extends GameShell {
     drawRackDisplays(this.pieces);
     this.crowd.update(dt, this.entries, (type, m) => this.pieces.add(type, m));
     this.world.drawPieces(this.pieces, this.state, this.serverNow);
+    this.drawExtra(dt, this.pieces);
     this.pieces.end();
     this.labels.update(this.ctx.camera, labels);
   }
+
+  /** Hook for derived scenes (feature 003: machines) inside the piece renderer batch. */
+  protected drawExtra(_dt: number, _pieces: PieceRenderer): void {}
 
   /** Assets the scene needs at full detail before measuring. */
   static readonly WAIT_FOR = ['fx', 'clock-tower-stage-6-merged', 'clock-tower-stage-5-merged'];

@@ -3,6 +3,7 @@ import { debug, events, openGame, recordEvents, state } from './helpers.ts';
 
 test('a matching piece dropped in the build zone snaps; a wrong one is refused', async ({ page }) => {
   await openGame(page);
+  await debug(page, 'completeGroundwork'); // feature 003: Groundwork is covered by solo-machines.spec.ts
   await recordEvents(page);
   await page.locator('#game').focus();
   // stand in the build zone in front of the tower (plot center z = -2.5)

@@ -19,6 +19,10 @@ test('Foreman → Host → a delivered beam is seen by another player', async ({
   await a.page.getByTestId('foreman-build').click();
   await expect.poll(async () => (await me(a.page)).crew?.role, { timeout: 8000 }).toBe('host');
   const plot = (await me(a.page)).crew!.plot;
+  // feature 003: skip Groundwork (covered by mp-machines.spec.ts)
+  await a.page.waitForTimeout(550);
+  await dev(a.page, 'fillGround', plot);
+  await expect.poll(async () => ((await plots(a.page))[plot] as { groundPoured?: number } | undefined)?.groundPoured, { timeout: 5000 }).toBe(4);
   await expect.poll(async () => (await plots(b.page))[plot]?.state, { timeout: 8000 }).toBe('building');
   expect((await plots(b.page))[plot]!.hostName).toBe((await me(a.page)).name);
   // deliver a beam into the build zone

@@ -1,5 +1,5 @@
 import { Client, type Room } from '@colyseus/sdk';
-import { decodeSnapshot, type ClientMessageType, type ClientMessages, type ServerEvents, type Snapshot } from '@hht/shared';
+import { CLOCK_TOWER, decodeSnapshot, type ClientMessageType, type ClientMessages, type ServerEvents, type Snapshot, type TowerProgress } from '@hht/shared';
 import { ServerClock } from './clock.ts';
 import type { Matchmade } from './matchmake.ts';
 
@@ -12,6 +12,8 @@ export interface PlayerView {
   crewPlot: number;
   crewRole: string;
   away: boolean;
+  /** feature 003: MachineId operated, or -1 */
+  machine: number;
 }
 export interface PlotView {
   state: string;
@@ -24,6 +26,20 @@ export interface PlotView {
   crewSize: number;
   bin: ArrayLike<string> & Iterable<string>;
   finishedAt: number;
+  // feature 003
+  groundDug: number;
+  groundPoured: number;
+  highFilled: number;
+  mixerBags: number;
+  mixerMixUntil: number;
+  machineOps: ArrayLike<string> & Iterable<string>;
+  hookType: string;
+  palletTypes: ArrayLike<string> & Iterable<string>;
+}
+
+/** The plot's tower progress as the shared rules see it. */
+export function progressOf(p: PlotView): TowerProgress {
+  return { blueprintId: CLOCK_TOWER.id, completedStages: p.completedStages, filledSlots: p.filledSlots, groundDug: p.groundDug ?? 0, groundPoured: p.groundPoured ?? 0, highFilled: p.highFilled ?? 0 };
 }
 export interface PieceView {
   type: string;

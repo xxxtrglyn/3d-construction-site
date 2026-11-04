@@ -3,21 +3,31 @@ import {
   CLOCK_TOWER,
   currentStage,
   deliver,
+  dig,
+  groundworkDone,
+  groundworkPart,
   initialProgress,
   isMasterpiece,
   neededPiece,
+  pour,
   reset as resetProgress,
   starsOf,
   type DeliverResult,
   type PieceTypeId,
   type TowerProgress,
+  type Via,
 } from '@hht/shared';
 import { BUILD_ZONE_RADIUS, TOWER_HALF } from '../world/layout.ts';
 import type { Piece, PieceManager } from './pieceManager.ts';
 
+/** Why a delivery was refused (feature 003 adds Groundwork and high slots). */
+export type RefuseReason = 'wrongPiece' | 'groundworkFirst' | 'tooHigh';
+
 export interface PlotEvents {
   onSnap(piece: Piece | null, result: DeliverResult, progress: TowerProgress): void;
-  onWrong(piece: Piece | null, needed: PieceTypeId | null): void;
+  onWrong(piece: Piece | null, needed: PieceTypeId | null, reason?: RefuseReason): void;
+  /** feature 003: a scoop counted or a bucket was poured (`done` = Groundwork complete) */
+  onGround?(progress: TowerProgress, done: boolean): void;
   /** fired after the last piece of a stage lands */
   onStageComplete(progress: TowerProgress): void;
   onMasterpiece(progress: TowerProgress): void;
@@ -50,6 +60,32 @@ export class TowerPlot {
   get stage() {
     return currentStage(this.progress);
   }
+  get inGroundwork(): boolean {
+    return !groundworkDone(this.progress);
+  }
+
+  /** One excavator scoop dumped on the heap (shared `dig`). */
+  dig(): boolean {
+    const next = dig(this.progress);
+    if (next === this.progress) return false;
+    this.progress = next;
+    this.events.onGround?.(next, false);
+    return true;
+  }
+
+  /** One concrete bucket into the dug pit (shared `pour`). */
+  pourConcrete(piece: Piece | null): boolean {
+    const { progress, result } = pour(this.progress);
+    if (result === 'notDug' || result === 'alreadyPoured') {
+      if (piece) this.bounce(piece);
+      this.events.onWrong(piece, this.needed, result === 'notDug' ? 'groundworkFirst' : 'wrongPiece');
+      return false;
+    }
+    this.progress = progress;
+    if (piece) this.pieces.remove(piece);
+    this.events.onGround?.(progress, result === 'groundworkDone');
+    return true;
+  }
 
   inZone(p: THREE.Vector3): boolean {
     const dx = p.x - this.center.x;
@@ -57,28 +93,35 @@ export class TowerPlot {
     return Math.hypot(dx, dz) <= BUILD_ZONE_RADIUS && p.y < 3.5;
   }
 
-  /** Apply a delivery (from a real piece in the zone, or the debug API with `piece = null`). */
-  deliverPiece(type: PieceTypeId, piece: Piece | null): DeliverResult {
+  /**
+   * Apply a delivery (a real piece in the zone, the debug API with `piece = null`, or a machine with
+   * `via`). Concrete goes to the footing (`pour`); Groundwork and high slots are refused with a reason.
+   */
+  deliverPiece(type: PieceTypeId, piece: Piece | null, via: Via = 'hand', slot?: { high: boolean }): DeliverResult {
     if (this.pendingCompletion) {
       // a stage transition is mid-flight; finish it first so slots line up
       this.finishPending();
     }
-    const slotIndex = this.progress.filledSlots;
-    const { progress, result } = deliver(this.progress, type);
-    if (result === 'wrongPiece' || result === 'alreadyComplete') {
+    if (type === 'concrete' && groundworkPart(this.progress) !== null) {
+      return this.pourConcrete(piece) ? 'snapped' : 'groundworkFirst';
+    }
+    const slotIndex = this.progress.filledSlots - this.progress.highFilled;
+    const { progress, result } = deliver(this.progress, type, via, slot);
+    if (result === 'wrongPiece' || result === 'alreadyComplete' || result === 'groundworkFirst' || result === 'tooHigh') {
       if (piece) this.bounce(piece);
-      this.events.onWrong(piece, this.needed);
+      this.events.onWrong(piece, this.needed, result === 'alreadyComplete' ? 'wrongPiece' : result);
       return result;
     }
+    const highSlot = progress.highFilled > this.progress.highFilled || (progress.filledSlots === 0 && !!slot?.high);
     this.progress = progress;
-    if (piece) {
+    if (piece && !highSlot) {
       this.pieces.detach(piece);
       piece.state = 'flying';
       piece.slotIndex = slotIndex;
       const to = this.slotPos(slotIndex);
       to.y += 0.25;
       piece.flight = { from: piece.position.clone(), to, t: 0, dur: FLIGHT, spin: (Math.random() - 0.5) * 6 };
-    }
+    } else if (piece) this.pieces.remove(piece);
     this.events.onSnap(piece, result, progress);
     if (result === 'stageComplete' || result === 'masterpiece') {
       this.pendingCompletion = progress;
@@ -138,13 +181,25 @@ export class TowerPlot {
     }
   }
 
-  /** debug: fill the remaining slots of the current stage */
+  /** debug: finish Groundwork (feature 003) */
+  completeGroundwork(): void {
+    if (!this.inGroundwork) return;
+    this.progress = { ...this.progress, groundDug: CLOCK_TOWER.groundwork.scoops, groundPoured: CLOCK_TOWER.groundwork.concrete };
+    this.events.onGround?.(this.progress, true);
+  }
+
+  /** debug: fill the remaining slots of the current stage (Groundwork first; high slots through the crane rule) */
   completeStage(): DeliverResult | null {
+    this.completeGroundwork();
     const need = this.needed;
-    if (!need) return null;
+    const st = this.stage;
+    if (!need || !st) return null;
     let r: DeliverResult = 'snapped';
     const start = this.progress.completedStages;
-    while (this.progress.completedStages === start && !this.masterpiece) r = this.deliverPiece(need, null);
+    for (let i = 0; i < 40 && this.progress.completedStages === start && !this.masterpiece; i++) {
+      const high = this.progress.filledSlots - this.progress.highFilled >= st.slotCount - st.highSlots;
+      r = this.deliverPiece(need, null, high ? 'crane' : 'hand', { high });
+    }
     return r;
   }
 

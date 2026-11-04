@@ -18,6 +18,8 @@ export const RATE = {
   name: { refillPerS: 1 / 2, burst: 1 },
   respawn: { refillPerS: 1 / 2, burst: 1 },
   ping: { refillPerS: 1, burst: 3 },
+  /** feature 003: `machine` enter/exit intents (capacity 6, +2/s; same strike rules) */
+  machine: { refillPerS: 2, burst: 6 },
 } as const;
 
 export type RateClass = keyof typeof RATE;

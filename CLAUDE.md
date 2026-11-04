@@ -38,6 +38,8 @@ Debug URLs:
 - `?w=<n>`: invite link to world n
 - `?perf=1`: the solo Masterpiece reference scene
 - `?perf=crowd`: 100 workers plus 12 towers, offline
+- `?perf=machines`: the crowd scene plus all 48 machines posed mid-action, offline
+- `?shot=machines`: the solo plot with its 4 machines (art comparison with `assets/renders/machines-plot.png`)
 - `?shot=closeup|masterpiece|overview`: art comparison cameras
 - `?q=low|high`: quality tier
 
@@ -46,7 +48,9 @@ Server env: `HHT_PORT`, `HHT_DB`, `HHT_SHIFT_MINUTES`, `HHT_MAX_PLAYERS`, `HHT_M
 
 Status: feature 001 is done (gate in `specs/001-single-player-prototype/gate.md`). Feature 002 is
 implemented (gate in `specs/002-multiplayer-core/gate.md`, automated items pass). Feature 003 is
-planned in `specs/003-construction-machines/`.
+implemented (gate in `specs/003-construction-machines/gate.md`; protocol v2, database schema v2;
+owner, device and playtest items open). Music and machine sounds: `tools/audio/generate-audio.mjs`
+(ElevenLabs; the key comes from `ELEVENLABS_API_KEY`, never committed).
 
 ## Rules of thumb
 
@@ -56,7 +60,10 @@ planned in `specs/003-construction-machines/`.
   never add client-only movement code. Server systems orchestrate; rules stay pure.
 - Machines (003) are parameter rigs stepped only by the shared `stepMachine()` (`shared/machines.ts`)
   on the server, the operating client, solo mode and the bots. Never use Rapier for machines.
-- The binary world snapshot message is `ws`. `snap` is the JSON "piece snapped" event.
+- The binary world snapshot message is `ws` (protocol v2: worker records, then 12-byte machine
+  records; the operator's machine in `ownMachine`). `snap` is the JSON "piece snapped" event.
+- Every new building starts with Groundwork (`dig`, `pour`); the 4 high slots need the crane
+  (`deliver(…, via)` → `tooHigh`). Tests that start at stage 1 use `dev fillGround` / `skipGroundwork`.
 - Never exceed the budgets in `tools/assets/budgets.json`. The critical payload must stay ≤ 5 MB.
 - The visual look must match the reference renders: a 2-band toon ramp with shadow tint
   (0.50, 0.52, 0.66), plus inverted-hull outlines.

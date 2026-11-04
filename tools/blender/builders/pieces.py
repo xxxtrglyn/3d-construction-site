@@ -75,7 +75,25 @@ def _cone(P):
     new_obj('cone', 'ConeStripe', loc=(0, 0, 0.05), mat=toon('white'), smooth='angle', parent=P, vertices=18, radius1=0.099, radius2=0.078, depth=0.07)
 
 
-BUILDERS = {'beam': _beam, 'brick': _brick, 'panel': _panel, 'paint': _paint, 'decor': _decor, 'bell': _bell, 'cone': _cone}
+def _cement(P):
+    # feature 003: a plump paper cement bag (0.5 x 0.35 x 0.3) with a printed band
+    new_obj('cube', 'Bag', loc=(0, 0, 0), scale=D(0.5, 0.35, 0.26), mat=toon('cream'), bevel=0.07, seg=3, parent=P)
+    new_obj('cube', 'BagBand', loc=(0, 0, 0.005), scale=D(0.2, 0.36, 0.27), mat=toon('roofgray'), bevel=0.02, parent=P)
+    new_obj('cube', 'BagLabel', loc=(0.16, -0.176, 0.0), scale=D(0.1, 0.01, 0.1), mat=toon('beam'), parent=P)
+
+
+def _concrete(P):
+    # feature 003: a steel bucket of wet grey concrete (mixer output)
+    new_obj('cyl', 'Bucket', loc=(0, 0, -0.02), scale=(0.18, 0.18, 0.17), mat=toon('steel'), smooth='angle', parent=P, vertices=18)
+    new_obj('cyl', 'ConcreteTop', loc=(0, 0, 0.15), scale=(0.165, 0.165, 0.012), mat=toon('stone'), smooth='angle', parent=P, vertices=18)
+    new_obj('sphere', 'Blob', loc=(0.05, 0.03, 0.165), scale=(0.08, 0.07, 0.035), mat=toon('stone'), smooth='all', parent=P, segments=10, ring_count=6)
+    new_obj('torus', 'Handle', loc=(0, 0, 0.15), rot=(math.pi / 2, 0, 0), mat=toon('dark'), smooth='all', parent=P,
+            major_radius=0.17, minor_radius=0.012, major_segments=20, minor_segments=6)
+    new_obj('cyl', 'Rim', loc=(0, 0, 0.145), scale=(0.185, 0.185, 0.015), mat=toon('dark'), smooth='angle', parent=P, vertices=18)
+
+
+BUILDERS = {'beam': _beam, 'brick': _brick, 'panel': _panel, 'paint': _paint, 'decor': _decor, 'bell': _bell, 'cone': _cone,
+            'cement': _cement, 'concrete': _concrete}
 
 
 def build():

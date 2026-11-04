@@ -1,7 +1,7 @@
 import { createHash } from 'node:crypto';
 import { Room, ServerError, type Client } from '@colyseus/core';
 import {
-  CLOSE, NET, PLOTS, PROTOCOL_VERSION, SITE, initialWorker, uniqueName, validateJoinOptions, validateMessage,
+  CLOSE, MAX_MACHINES, NET, PLOTS, PROTOCOL_VERSION, SITE, initialWorker, uniqueName, validateJoinOptions, validateMessage,
   type ClientMessageType, type ClientMessages, type JoinOptions, type ObstacleBox, type RateClass, type ServerEventType, type ServerEvents,
 } from '@hht/shared';
 import { getContext, type ServerContext } from '../context.ts';
@@ -39,6 +39,7 @@ const RATE_OF: { [K in ClientMessageType]: RateClass | ((m: ClientMessages[K]) =
   chat: 'chat',
   report: 'report',
   dev: 'admin',
+  machine: 'machine',
 };
 
 export const sha256 = (s: string): string => createHash('sha256').update(s).digest('hex');
@@ -89,7 +90,11 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     const state = new WorldState();
     state.worldId = this.worldId;
     state.shift = new ShiftState();
-    for (let i = 0; i < PLOTS.count; i++) state.plots.push(new PlotState());
+    for (let i = 0; i < PLOTS.count; i++) {
+      const ps = new PlotState();
+      for (let k = 0; k < 4; k++) ps.machineOps.push('');
+      state.plots.push(ps);
+    }
     this.setState(state);
     this.metricsRef = this.ctx.metrics.world(this.worldId, () => this.sessions.size);
     this.systems = new WorldSystems(this);
@@ -178,6 +183,13 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       recentChat: [],
       lastChatNorm: new Map(),
       reportedThisShift: new Set(),
+      machine: -1,
+      lastMachineInputAt: now,
+      actTimes: [],
+      machineTiers: new Uint8Array(MAX_MACHINES),
+      machineHash: new Int32Array(MAX_MACHINES),
+      machineSentTick: new Int32Array(MAX_MACHINES).fill(-1_000_000),
+      teleports: 0,
     };
     if (this.nextNetId > 0xffff) this.nextNetId = 1;
     this.sessions.set(s.pid, s);
@@ -307,6 +319,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   }
 
   respawn(s: Session, reason: 'respawn' | 'outOfBounds'): void {
+    if (s.machine >= 0) this.systems.machines.exit(s, 'jump');
     teleport(s, SITE.spawn.x, SITE.spawn.y, SITE.spawn.z);
     this.sendTo(s, 'correction', { reason });
   }
@@ -317,12 +330,16 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     const t0 = performance.now();
     const now = this.now();
     this.tickNo++;
+    // workerMovedByMachine audit (feature 003): a worker with no input this tick must not move
+    const still: Array<{ s: Session; x: number; z: number; tp: number }> = [];
     for (const s of this.sessions.values()) {
       if (s.state !== 'active') continue;
-      simulate(s, this.blockers);
+      if (!s.inputs.length && s.machine < 0) still.push({ s, x: s.worker.x, z: s.worker.z, tp: s.teleports });
+      simulate(s, this.blockers, this.systems.machines, now);
       if (s.worker.y < -5) this.respawn(s, 'outOfBounds');
     }
     this.systems.tick(now);
+    for (const c of still) if (c.s.machine < 0 && c.s.teleports === c.tp && (c.s.worker.x !== c.x || c.s.worker.z !== c.z)) this.systems.machines.audit.workerMovedByMachine++;
     this.secondAcc += NET.tickMs;
     if (this.secondAcc >= 1000) {
       this.secondAcc -= 1000;
@@ -334,6 +351,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       this.sessions.values(),
       this.tickNo,
       now,
+      this.systems.machines,
+      this.metricsRef,
     );
     this.metricsRef.encodeMs.push(performance.now() - e0);
     if (this.ctx.cfg.injectTickMs > 0) {
@@ -364,6 +383,8 @@ export class WorldRoom extends Room<{ state: WorldState }> {
   private everySecond(now: number): void {
     const active = [...this.sessions.values()].filter((s) => s.state === 'active').length;
     this.metricsRef.bytesPerClientPerS.push(active ? this.bytesAcc / active : 0);
+    this.metricsRef.machineBytesPerClientPerS.push(active ? this.metricsRef.machineBytesAcc / active : 0);
+    this.metricsRef.machineBytesAcc = 0;
     this.metricsRef.ticks.push(this.ticksThisSecond);
     this.bytesAcc = 0;
     this.ticksThisSecond = 0;

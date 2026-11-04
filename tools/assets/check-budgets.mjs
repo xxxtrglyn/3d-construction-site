@@ -42,7 +42,28 @@ for (const a of manifest.assets ?? []) {
   if (limit === undefined) failures.push(`asset ${a.id}: no budget defined in tools/assets/budgets.json`);
   else if (!ok) failures.push(`asset ${a.id}: ${kb(a.bytes)} exceeds budget ${kb(limit)}`);
   if (a.group === 'critical') criticalAssets.push(a);
+  // feature 003: machine models stream in after play starts (FR-038) — never in the critical payload
+  if (a.group !== 'deferred' && (budgets.deferredOnly ?? []).some((re) => new RegExp(re).test(a.id))) failures.push(`asset ${a.id}: must be in the deferred group (FR-038)`);
   rows.push([a.id, a.group, kb(a.bytes), limit ? kb(limit) : '—', ok ? 'ok' : 'FAIL']);
+}
+for (const [kind, tiers] of Object.entries(budgets.render ?? {})) {
+  if (kind === 'high' || kind === 'low') continue;
+  for (const t of ['high', 'low']) if (!tiers?.[t] || !(tiers[t].drawCalls > 0) || !(tiers[t].triangles > 0)) failures.push(`render.${kind}.${t}: drawCalls and triangles budgets required`);
+}
+
+// --- generated audio (deferred: never critical) ---
+const audioDir = join(ROOT, 'packages/client/public/audio');
+if (budgets.audio && existsSync(audioDir)) {
+  const files = readdirSync(audioDir).filter((f) => f.endsWith('.mp3'));
+  let total = 0;
+  for (const f of files) {
+    const b = statSync(join(audioDir, f)).size;
+    total += b;
+    if (b > budgets.audio.perFileBytes) failures.push(`audio ${f}: ${kb(b)} exceeds ${kb(budgets.audio.perFileBytes)}`);
+  }
+  const ok = total <= budgets.audio.totalBytes;
+  if (!ok) failures.push(`audio total ${kb(total)} exceeds ${kb(budgets.audio.totalBytes)}`);
+  rows.push([`(audio, ${files.length} files)`, 'deferred', kb(total), kb(budgets.audio.totalBytes), ok ? 'ok' : 'FAIL']);
 }
 
 // --- JS bundle (gzip) from the production build, per chunk ---

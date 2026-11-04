@@ -1,5 +1,5 @@
 import type { Client, Deferred } from '@colyseus/core';
-import type { Bucket, MoveInput, RateClass, StrikeWindow, WorkerState } from '@hht/shared';
+import type { Bucket, MachineId, MachineState, MoveInput, RateClass, StrikeWindow, WorkerState } from '@hht/shared';
 
 export interface ChatLine {
   text: string;
@@ -45,4 +45,23 @@ export interface Session {
   recentChat: ChatLine[];
   lastChatNorm: Map<string, number>;
   reportedThisShift: Set<string>;
+  // feature 003
+  /** the machine this session operates, or -1 */
+  machine: MachineId | -1;
+  /** last machine input with movement or an action (idle put-out, MACHINE.idleExitS) */
+  lastMachineInputAt: number;
+  /** times (ms) of the last accepted `act` edges (cap MACHINE.actPerSecond) */
+  actTimes: number[];
+  /** per machine: interest tier (0 = unseen), hash of the last record sent, and the tick it was sent */
+  machineTiers: Uint8Array;
+  machineHash: Int32Array;
+  machineSentTick: Int32Array;
+  /** bumped by every teleport/respawn (the workerMovedByMachine audit ignores those) */
+  teleports: number;
+}
+
+/** A machine held by the server (data-model §5); its operator is a session pid or ''. */
+export interface MachineRec {
+  state: MachineState;
+  operator: string;
 }

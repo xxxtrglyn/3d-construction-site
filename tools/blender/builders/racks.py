@@ -5,7 +5,7 @@ where the first display piece sits.
 """
 from .common import D, beam, empty, new_obj, toon
 
-RACK_COLORS = {'beam': 'beam', 'brick': 'brick', 'panel': 'teal', 'paint': 'purple', 'decor': 'pink', 'bell': 'gold'}
+RACK_COLORS = {'beam': 'beam', 'brick': 'brick', 'panel': 'teal', 'paint': 'purple', 'decor': 'pink', 'bell': 'gold', 'cement': 'roofgray'}
 
 
 def _rack(R, accent):

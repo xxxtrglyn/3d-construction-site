@@ -45,12 +45,16 @@ export interface MoveInput {
   dx: number;
   dz: number;
   run: boolean;
-  /** jump pressed this step */
+  /** jump pressed this step (in a machine: get out) */
   jump: boolean;
+  /** feature 003: machine action pressed this step (edge); ignored while walking */
+  act: boolean;
+  /** feature 003: toss pressed this step — client-only (crane camera toggle); the server ignores it */
+  alt: boolean;
 }
 
-export type AnimId = 0 | 1 | 2 | 3 | 4 | 5; // idle, walk, run, air, cheer, emote
-export const ANIM = { idle: 0, walk: 1, run: 2, air: 3, cheer: 4, emote: 5 } as const;
+export type AnimId = 0 | 1 | 2 | 3 | 4 | 5 | 6; // idle, walk, run, air, cheer, emote, seated
+export const ANIM = { idle: 0, walk: 1, run: 2, air: 3, cheer: 4, emote: 5, seated: 6 } as const;
 
 export function initialWorker(spawn: { x: number; y: number; z: number }, facing = Math.PI): WorkerState {
   return { x: spawn.x, y: spawn.y, z: spawn.z, vx: 0, vy: 0, vz: 0, facing, grounded: true, coyote: COYOTE, jumpBuffer: 0, carrying: null };
@@ -75,7 +79,8 @@ export function animOf(s: WorkerState): AnimId {
 
 const clamp = (v: number, lo: number, hi: number): number => (v < lo ? lo : v > hi ? hi : v);
 
-interface Push {
+/** A moving circle being resolved against obstacles (also used by the machine stepper). */
+export interface Push {
   x: number;
   z: number;
   vx: number;
@@ -83,7 +88,7 @@ interface Push {
 }
 
 /** Push a circle out of a rotated box; also removes the velocity component into the surface. */
-function pushBox(p: Push, b: ObstacleBox, r: number): void {
+export function pushBox(p: Push, b: ObstacleBox, r: number): void {
   const dx = p.x - b.x;
   const dz = p.z - b.z;
   const lx = b.c * dx - b.s * dz;
@@ -130,7 +135,7 @@ function pushBox(p: Push, b: ObstacleBox, r: number): void {
   }
 }
 
-function pushCyl(p: Push, c: ObstacleCyl, r: number): void {
+export function pushCyl(p: Push, c: ObstacleCyl, r: number): void {
   const dx = p.x - c.x;
   const dz = p.z - c.z;
   const R = c.r + r;

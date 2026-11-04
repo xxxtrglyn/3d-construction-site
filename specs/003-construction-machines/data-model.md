@@ -140,7 +140,9 @@ for the old types stay 1–7. The carry code goes from 3 bits to 4 bits on the w
 ```ts
 interface Session { /* 002 */ machine: MachineId | -1; lastMachineInputAt: number }
 interface PieceRec { /* 002 */ state: 'loose' | 'flying' | 'hooked' | 'pallet'; heldBy: MachineId | -1 }
-interface MachineRec { state: MachineState; operator: string /* sessionId */ | ''; lastSent: Map<string, number> /* per-receiver dirty tracking */ }
+interface MachineRec { state: MachineState; operator: string /* sessionId */ | '' }
+// per-receiver dirty tracking lives on the Session instead (typed arrays, no Map churn):
+// Session.machineTiers: Uint8Array(48), machineHash: Int32Array(48), machineSentTick: Int32Array(48)
 ```
 
 `PlotState` (schema) gains:
@@ -181,6 +183,6 @@ See [contracts/persistence-v2.sql](./contracts/persistence-v2.sql). The `buildin
 | Record | Size | Fields |
 |---|---|---|
 | Worker entity | 10 B (unchanged size) | byte 9 = anim (3 bits) \| carry (4 bits) \| emoting (1 bit); new anim `seated = 6` |
-| Machine record | 12 B | id u8, x i16 cm, z i16 cm, yaw u8, p1 i16, p2 i16, p3 u8, flags u8 (op present, load code 4 bits, phase 2 bits) |
+| Machine record | 12 B | id u8, x i16 cm, z i16 cm, yaw u8, p1 i16 (×1000), p2 i16 (×1000), p3 u8 (dm), flags u8 (op present, load code 4 bits, phase 2 bits) |
 | Own machine block | 1 B, + 30 B while operating | `inMachine` u8 (0xff = none), then 7 × f32 (x, z, yaw, p1, p2, p3, phaseT), phase u8, loadCode u8 |
 | Move input byte | 1 B per step | bit0 run, bit1 jump, bit2 act, bit3 alt (client-only, ignored by the server) |

@@ -2,7 +2,8 @@
  * `pnpm loadtest [--duration 300] [--bots 100] [--soak 1800] [--url http://host:2567] [--selftest]`
  * Headless 100-bot load test (constitution VI, research R12). Boots an in-process server unless
  * --url is given, runs bots in 4 worker threads, samples metrics every second, checks consistency
- * and asserts the `net` budgets from tools/assets/budgets.json. Writes reports/loadtest/<ts>.json.
+ * and asserts the `net` budgets from tools/assets/budgets.json. Writes reports/loadtest/<ts>.json (report v2:
+ * feature 003 machine usage and consistency counters, specs/003-construction-machines/contracts/loadtest-report-v2.md).
  */
 import { execSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
@@ -127,12 +128,21 @@ async function main(): Promise<void> {
       if (p.completedStages > 6 || (st && p.filledSlots >= st.slotCount)) overfilled++;
     }
   }
+  // feature 003: hooked and pallet pieces are deliberately not in the schema (research M10)
+  let heldNow = 0;
+  if (world) for (const p of world.systems.pieces.values()) if (p.state === 'hooked' || p.state === 'pallet') heldNow++;
+  const mAudit = world?.systems.machines.audit;
   const consistency = {
-    duplicatePieces: world ? Math.abs(world.state.pieces.size - world.systems.pieces.size) : 0,
+    duplicatePieces: world ? Math.abs(world.state.pieces.size - (world.systems.pieces.size - heldNow)) : 0,
     doubleFilledSlots: overfilled + (world?.systems.audit.overfilledSlots ?? 0),
     nonCrewSnaps: world?.systems.audit.nonCrewSnaps ?? 0,
     divergentViews: divergent,
     chatOutsideChannel: all.reduce((s, b) => s + b.chatOutsideChannel, 0),
+    // feature 003 (contracts/loadtest-report-v2.md): all must be 0
+    machineOutsiderOps: (mAudit?.machineOutsiderOps ?? 0) + all.reduce((s, b) => s + (b.machineOutsiderOps ?? 0), 0),
+    highFilledByHand: mAudit?.highFilledByHand ?? 0,
+    workerMovedByMachine: mAudit?.workerMovedByMachine ?? 0,
+    heldPiecesLost: mAudit?.heldPiecesLost ?? 0,
   };
   const behaviors: Record<string, number> = {};
   for (const b of all) for (const [k, v] of Object.entries(b.behaviors)) behaviors[k] = (behaviors[k] ?? 0) + v;
@@ -151,6 +161,18 @@ async function main(): Promise<void> {
   for (const [k, v] of Object.entries(consistency)) rows.push({ name: `consistency.${k}`, limit: 0, actual: v, pass: v === 0 });
   const connected = all.filter((b) => b.connected).length;
   rows.push({ name: 'bots.connected', limit: botCount, actual: connected, pass: connected === botCount });
+  // feature 003: machines really exercised (full runs only)
+  const usage = world?.systems.machines.usage ?? { groundworkDone: 0, craneSnaps: 0, forkliftSnaps: 0, maxMachinesMoving: 0 };
+  const machineBytes = world ? dist(world.metricsRef.machineBytesPerClientPerS.values().slice(Math.round(WARMUP_S))) : dist([]);
+  const machines = {
+    groundworkDone: usage.groundworkDone, craneSnaps: usage.craneSnaps, forkliftSnaps: usage.forkliftSnaps, maxMachinesMoving: usage.maxMachinesMoving,
+    machineBytesPerClientPerS: { avg: machineBytes.avg, p95: machineBytes.p95 },
+  };
+  if (world && mode === 'full') {
+    rows.push({ name: 'machines.groundworkDone', limit: 4, actual: usage.groundworkDone, pass: usage.groundworkDone >= 4 });
+    rows.push({ name: 'machines.craneSnaps', limit: 8, actual: usage.craneSnaps, pass: usage.craneSnaps >= 8 });
+    rows.push({ name: 'behaviors.palletUnload', limit: 10, actual: behaviors.palletUnload ?? 0, pass: (behaviors.palletUnload ?? 0) >= 10 });
+  }
   const pass = rows.every((r) => r.pass);
   let gitCommit = '';
   try {
@@ -159,16 +181,17 @@ async function main(): Promise<void> {
     /* not a git checkout */
   }
   const report = {
-    version: 1, startedAt, durationS: duration, mode, gitCommit,
+    version: 2, startedAt, durationS: duration, mode, gitCommit,
     bots: { count: botCount, connected, disconnects: all.reduce((s, b) => s + b.disconnects, 0), chatRechecked: all.reduce((s, b) => s + b.chatRechecked, 0), behaviors, errors: errors.slice(0, 10) },
     server: { tickMs: tickStats, encodeMs: encodeStats, sqliteMs: sqliteStats, eventLoopDelayMs: metricsSnap.eventLoopDelayMs, gcPauseMs: metricsSnap.gcPauseMs, ticksPerS, heapMb: { start: startHeap, peak: peakHeap, end: process.memoryUsage().heapUsed / 1048576, slopeMbPerMin: heapSlope, slopeBasis: heapSlopeBasis, rawSlopeMbPerMin: rawHeapSlope, retained }, rssMb: metricsSnap.rssMb },
     clients: { bytesInPerS: bytes, rttMs: dist(all.flatMap((b) => b.rtts)) },
+    machines,
     consistency,
     budgets: rows,
     pass,
   };
   const file = writeReport(ROOT, report);
-  printSummary(rows, [['behaviors', JSON.stringify(behaviors)], ['bytes/bot/s (p95/max)', `${bytes.p95} / ${bytes.max}`], ...(soak ? [['heap slope basis', `${heapSlopeBasis} (raw fit ${rawHeapSlope.toFixed(2)} MB/min)`] as [string, string]] : []), ['chat rechecks (ordering race)', String(all.reduce((s, b) => s + b.chatRechecked, 0))], ['report', file]]);
+  printSummary(rows, [['behaviors', JSON.stringify(behaviors)], ['machines', JSON.stringify(machines)], ['bytes/bot/s (p95/max)', `${bytes.p95} / ${bytes.max}`], ...(soak ? [['heap slope basis', `${heapSlopeBasis} (raw fit ${rawHeapSlope.toFixed(2)} MB/min)`] as [string, string]] : []), ['chat rechecks (ordering race)', String(all.reduce((s, b) => s + b.chatRechecked, 0))], ['report', file]]);
   for (const w of workers) w.postMessage({ type: 'stop' });
   await sleep(1500);
   for (const w of workers) await w.terminate();

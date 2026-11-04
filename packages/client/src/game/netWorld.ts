@@ -1,18 +1,22 @@
 import * as THREE from 'three';
 import {
-  CLOCK_TOWER, PIECE_TYPES, SITE, arcPosition, currentStage, isPieceTypeId, starsOf,
-  type PieceTypeId, type PlotDef, type ServerEvents,
+  CLOCK_TOWER, PIECE_TYPES, SITE, arcPosition, currentStage, groundworkDone, groundworkPart, isPieceTypeId, machineId, starsOf,
+  type MachineKind, type PieceTypeId, type PlotDef, type ServerEvents, type SlotRef,
 } from '@hht/shared';
 import type { AssetStore } from '../assets/loader.ts';
 import type { Sfx } from '../audio/sfx.ts';
 import { Celebration } from '../fx/celebration.ts';
 import { Puffs } from '../fx/puff.ts';
-import type { PieceView, PlotView, WorldView } from '../net/connection.ts';
+import { progressOf, type PieceView, type PlotView, type WorldView } from '../net/connection.ts';
 import { flagHtml } from '../ui/flags.ts';
 import { addOutline } from '../render/outline.ts';
 import { escapeHtml } from '../crowd/labels.ts';
 import type { PieceRenderer } from '../world/pieceRenderer.ts';
 import { RACK_DISPLAY } from '../world/layout.ts';
+import { GroundworkView, type GroundworkState } from '../world/groundworkView.ts';
+import { HighSlotRings } from '../world/highSlots.ts';
+import { MachineCue } from '../world/machineCue.ts';
+import type { MachineViewPose } from '../machines/machineViews.ts';
 
 const ON_Y = THREE.Object3D.DEFAULT_UP;
 /** LOD0 (merged) towers: at most this many, within this distance (research R7). */
@@ -102,6 +106,11 @@ export class NetWorld {
   private readonly hudRoot: HTMLElement;
   private readonly sfx: Sfx;
   binTop = 0.16;
+  // feature 003
+  readonly groundwork: GroundworkView;
+  readonly cue = new MachineCue();
+  readonly highSlots = new HighSlotRings();
+  private readonly gwStates: Array<GroundworkState | null> = SITE.plots.map(() => null);
 
   constructor(assets: AssetStore, hudRoot: HTMLElement, sfx: Sfx, particles: number, shadows = true) {
     TowerSlot.shadows = shadows;
@@ -118,6 +127,8 @@ export class NetWorld {
       this.celebratingPlot.push(-1);
     }
     this.group.add(this.puffs.mesh);
+    this.groundwork = new GroundworkView(SITE.plots.map((def) => ({ def, spots: SITE.machines[def.index]! })), hudRoot);
+    this.group.add(this.groundwork.group, this.cue.group, this.highSlots.group);
     assets.onLoaded((id) => {
       if (id === 'fx') {
         const puff = assets.get('fx')?.getObjectByName('Fx_puff');
@@ -193,7 +204,9 @@ export class NetWorld {
     const near = new Set(order.filter((o) => o.d <= NEAR_DIST).slice(0, NEAR_TOWERS).map((o) => o.t.def.index));
     for (const { t } of order) {
       const p = plots[t.def.index];
-      t.set(this.assets, p && p.state !== 'free' ? p.completedStages : -1, near.has(t.def.index));
+      // feature 003: during Groundwork the pit shows instead of the foundation
+      const inGroundwork = !!p && p.state !== 'free' && !groundworkDone(progressOf(p));
+      t.set(this.assets, p && p.state !== 'free' && !inGroundwork ? p.completedStages : -1, near.has(t.def.index));
     }
     this.animateForeman(me, talking);
     this.puffs.update(dt);
@@ -239,6 +252,34 @@ export class NetWorld {
         lab.html = html;
       }
     }
+  }
+
+  /**
+   * Feature 003, per frame: Groundwork visuals on every plot, high-slot rings (and the lit snap ring),
+   * and the crew cue on the machine the viewer's crew needs.
+   */
+  updateMachines(dt: number, state: WorldView, serverNow: number, camera: THREE.Camera, me: THREE.Vector3, myPlot: number, poses: readonly MachineViewPose[], lit: SlotRef | null): void {
+    const rings: Array<{ progress: ReturnType<typeof progressOf> | null; spots: (typeof SITE.machines)[number] }> = [];
+    for (const d of SITE.plots) {
+      const p = state.plots[d.index];
+      const building = !!p && p.state !== 'free';
+      const progress = building && p ? progressOf(p) : null;
+      this.gwStates[d.index] = p ? { active: building && !!progress && !groundworkDone(progress), groundDug: p.groundDug ?? 0, groundPoured: p.groundPoured ?? 0, mixerBags: p.mixerBags ?? 0, mixerMixUntil: p.mixerMixUntil ?? 0 } : null;
+      rings.push({ progress: p?.state === 'building' ? progress : null, spots: SITE.machines[d.index]! });
+    }
+    this.groundwork.update(this.gwStates, serverNow, camera, me);
+    this.highSlots.update(dt, rings, lit);
+    const mp = myPlot >= 0 ? state.plots[myPlot] : undefined;
+    this.cue.update(
+      dt, myPlot, mp && mp.state === 'building' ? progressOf(mp) : null,
+      (k: MachineKind) => !!mp && (Array.from(mp.machineOps)[['crane', 'excavator', 'forklift', 'mixer'].indexOf(k)] ?? '') !== '',
+      (k: MachineKind) => {
+        const pose = poses[machineId(myPlot, k)];
+        const spots = SITE.machines[myPlot]!;
+        if (k === 'crane') return { x: spots.crane.x, z: spots.crane.z, top: spots.crane.cabHeight + 0.8 };
+        return { x: pose?.x ?? 0, z: pose?.z ?? 0, top: k === 'mixer' ? 2.2 : k === 'excavator' ? 2.4 : 2.2 };
+      },
+    );
   }
 
   /** Loose and flying pieces, plus bin contents, into the piece renderer batch. */
@@ -310,18 +351,36 @@ export class NetWorld {
   }
 }
 
-const PIECE_DOT: Record<string, string> = { beam: '#eb5a3d', brick: '#d9614a', panel: '#38a8b3', paint: '#9e73e6', decor: '#ff8cb8', bell: '#ffc74d' };
+const PIECE_DOT: Record<string, string> = { beam: '#eb5a3d', brick: '#d9614a', panel: '#38a8b3', paint: '#9e73e6', decor: '#ff8cb8', bell: '#ffc74d', cement: '#c9c4b8', concrete: '#9a9893' };
+
+/** The sign's "what next" line (FR-022): Groundwork parts and crane steps name the machine to use. */
+export function plotNeedText(p: PlotView): string {
+  const progress = progressOf(p);
+  const part = groundworkPart(progress);
+  if (part === 'dig') return `🚜 Dig ${progress.groundDug}/${CLOCK_TOWER.groundwork.scoops}: use the excavator`;
+  if (part === 'concrete') return `🥣 Concrete ${progress.groundPoured}/${CLOCK_TOWER.groundwork.concrete}: use the mixer`;
+  const stage = currentStage(progress);
+  if (!stage) return '';
+  const dot = `<span class="dot" style="background:${PIECE_DOT[stage.pieceType] ?? '#ccc'}"></span>`;
+  const hand = stage.slotCount - stage.highSlots;
+  const handFilled = progress.filledSlots - progress.highFilled;
+  if (stage.highSlots > 0 && handFilled >= hand) {
+    if (stage.pieceType === 'bell') return `${dot}🏗️ Bell: use the crane`;
+    return `${dot}🏗️ Roof ${progress.highFilled}/${stage.highSlots}: use the crane`;
+  }
+  const crane = stage.highSlots > 0 ? ` · 🏗️ roof ${progress.highFilled}/${stage.highSlots} by crane` : '';
+  return `${dot}${PIECE_TYPES[stage.pieceType as PieceTypeId].label} ${handFilled}/${hand}${crane}`;
+}
 
 function plotLabelHtml(i: number, p: PlotView, mine: boolean): string {
   if (p.state === 'free') return `<div class="tag">Free plot · talk to the Foreman</div>`;
-  const progress = { blueprintId: CLOCK_TOWER.id, completedStages: p.completedStages, filledSlots: p.filledSlots };
+  const progress = progressOf(p);
   const stars = starsOf(progress);
   const starStr = `<span class="stars">${'★'.repeat(stars)}${'☆'.repeat(5 - stars)}</span>`;
   const host = escapeHtml(p.hostName);
   if (p.state === 'finished') return `<div class="tag">${flagHtml(i, 16)} ★ Masterpiece · built by ${host}’s crew</div>`;
   if (p.state === 'unattended') return `<div class="tag">${flagHtml(i, 16)} Unfinished tower ${starStr} · adopt it at the Foreman</div>`;
-  const stage = currentStage(progress);
-  const need = stage ? `<span class="dot" style="background:${PIECE_DOT[stage.pieceType] ?? '#ccc'}"></span>${PIECE_TYPES[stage.pieceType as PieceTypeId].label} ${p.filledSlots}/${stage.slotCount}` : '';
+  const need = plotNeedText(p);
   const mode = p.joinMode === 'open' ? '🟢 Open' : p.joinMode === 'solo' ? '🔒 Solo' : '✋ Ask';
   return `<div class="tag${mine ? ' mine' : ''}">${flagHtml(i, 16)} 👑 ${host} ${starStr}</div><div class="tag sub">${need} · 👥 ${p.crewSize}/8 · ${mode}</div>`;
 }

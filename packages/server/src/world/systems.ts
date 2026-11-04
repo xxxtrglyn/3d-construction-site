@@ -1,16 +1,18 @@
 import {
-  CHAT, CLOCK_TOWER, INTERACT, NET, PIECE_TYPE_IDS, SITE, SOCIAL,
-  addToBin, arcPosition, assignPlot, becomesUnattended, canBin, currentStage, deliver, detectContact, dropPoint,
-  hostOf, initialProgress, inPlaza, isMasterpiece, maskBlocked, neededPiece, nextHost, normalizeForMatch, plotAtBin, plotAtZone,
-  removeMember, requestJoin, sanitize, setHost, shiftPhase, shouldHandOver, takeFromBin, tossArc, towerBlocker,
-  type Arc, type BinEntry, type ClientMessageType, type ClientMessages, type CrewMember, type CrewRecord, type JoinMode,
-  type MemberStatus, type PieceTypeId, type PlotStateName, type ShiftPhase, type TowerProgress,
+  CHAT, CLOCK_TOWER, INTERACT, MACHINE, NET, PIECE_TYPE_IDS, SITE, SOCIAL,
+  addToBin, arcPosition, assignPlot, becomesUnattended, canBin, currentStage, deliver, detectContact, dropPoint, groundworkDone,
+  groundworkPart, hostOf, initialProgress, inPlaza, isMasterpiece, maskBlocked, neededPiece, neededSupply, nextHost, normalizeForMatch,
+  plotAtBin, plotAtZone, pour, removeMember, requestJoin, sanitize, setDownSpot, setHost, shiftPhase, shouldHandOver, takeFromBin, tossArc,
+  towerBlocker,
+  type Arc, type BinEntry, type ClientMessageType, type ClientMessages, type CrewMember, type CrewRecord, type JoinMode, type MachineId,
+  type MemberStatus, type PieceTypeId, type PlotStateName, type ShiftPhase, type TowerProgress, type Via,
 } from '@hht/shared';
 import { WorldRepo, type BuildingRow } from '../persistence/repo.ts';
 import type { WorldRoom } from '../rooms/WorldRoom.ts';
 import { PieceState } from '../rooms/schema.ts';
 import { blocklistFor, type Blocklist } from '../systems/blocklist.ts';
 import { strike } from '../systems/limits.ts';
+import { MachineSystem } from '../systems/machines.ts';
 import { teleport } from '../systems/movement.ts';
 import type { Session } from './types.ts';
 
@@ -28,12 +30,19 @@ export interface Building {
   celebrateUntil: number;
   /** crew dissolves at this time after the Masterpiece celebration */
   dissolveAt: number;
+  /** feature 003: cement bags in the plot's mixer (0..4, persisted) */
+  mixerBags: number;
+  /** server ms until which the drum turns (0 = idle; not persisted) */
+  mixerMixUntil: number;
 }
 
-interface PieceRec {
+/** A server piece. Hooked and pallet pieces are held by a machine and are not in the schema (research M10). */
+export interface PieceRec {
   id: number;
   type: PieceTypeId;
-  state: 'loose' | 'flying';
+  state: 'loose' | 'flying' | 'hooked' | 'pallet';
+  /** the machine holding a hooked/pallet piece, else -1 */
+  heldBy: MachineId | -1;
   x: number;
   y: number;
   z: number;
@@ -82,12 +91,19 @@ export class WorldSystems {
   blocklist!: Blocklist;
   /** independent invariant checks read by the load test (must stay 0) */
   readonly audit = { nonCrewSnaps: 0, overfilledSlots: 0 };
+  /** feature 003: the plot machines */
+  readonly machines: MachineSystem;
   private nextPieceId = 1;
   private bootGraceUntil = 0;
   private lastPurge = 0;
 
   constructor(room: WorldRoom) {
     this.room = room;
+    this.machines = new MachineSystem(this);
+  }
+
+  machineIdleExitS(): number {
+    return this.t.machineIdleS;
   }
 
   private get cfg() {
@@ -117,6 +133,7 @@ export class WorldSystems {
     }
     this.syncShift();
     this.refreshBlockers();
+    this.machines.reset(); // after a restart every machine is parked and empty (FR-034)
     this.repo.purgeReports(now - CHAT.reportRetentionDays * 86_400_000);
     this.lastPurge = now;
   }
@@ -129,6 +146,7 @@ export class WorldSystems {
     const b: Building = {
       plot: r.plot, state: r.state, blueprintId: r.blueprintId, progress: r.progress, hostName: r.hostName,
       crew: { members: r.crew, joinMode: r.joinMode }, emptySince: r.emptySince, finishedAt: r.finishedAt, bin: r.bin, celebrateUntil: 0, dissolveAt: 0,
+      mixerBags: r.mixerBags, mixerMixUntil: 0,
     };
     this.plots[r.plot] = b;
     this.syncPlot(r.plot);
@@ -169,11 +187,13 @@ export class WorldSystems {
   }
 
   onAway(s: Session): void {
-    // a held piece drops where the worker stood
+    // an operator is put out (FR-011); a held piece drops where the worker stood
+    if (s.machine >= 0) this.machines.exit(s, 'disconnect');
     this.dropHeld(s);
   }
 
   onRemove(s: Session): void {
+    if (s.machine >= 0) this.machines.exit(s, 'disconnect');
     this.dropHeld(s);
     const req = this.requests.get(s.pid);
     if (req) this.withdraw(req);
@@ -212,6 +232,12 @@ export class WorldSystems {
       case 'chat': return this.chat(s, msg as ClientMessages['chat'], now);
       case 'report': return this.report(s, (msg as ClientMessages['report']).who, now);
       case 'dev': return this.dev(s, msg as ClientMessages['dev'], now);
+      case 'machine': {
+        const m = msg as ClientMessages['machine'];
+        if (m.op === 'enter') return this.machines.enter(s, m.id, now);
+        if (s.machine >= 0) this.machines.exit(s, 'jump');
+        return;
+      }
       default:
         return;
     }
@@ -231,6 +257,7 @@ export class WorldSystems {
 
   private grab(s: Session, target: ClientMessages['grab']['target'], now: number): void {
     if (s.worker.carrying) return this.bad(s, now);
+    if (s.machine >= 0) return; // operators cannot carry pieces (FR-007)
     const w = s.worker;
     if (target.kind === 'rack') {
       const r = SITE.racks[target.rack];
@@ -249,7 +276,7 @@ export class WorldSystems {
     const b = this.plots[target.plot];
     const def = SITE.plots[target.plot];
     if (!b || !def || s.crewPlot !== target.plot || Math.hypot(def.bin.x - w.x, def.bin.z - w.z) > def.bin.radius + LOOSE_REACH) return this.bad(s, now);
-    const e = takeFromBin(b.bin, neededPiece(b.progress));
+    const e = takeFromBin(b.bin, neededSupply(b.progress) ?? neededPiece(b.progress));
     if (!e) return;
     this.setHeld(s, e.type);
     this.syncPlot(b.plot);
@@ -284,7 +311,8 @@ export class WorldSystems {
   }
 
   private addPiece(type: PieceTypeId, x: number, y: number, z: number, now: number, actorPid: string, arc: Arc | null): void {
-    const looseCount = [...this.pieces.values()].length;
+    let looseCount = 0;
+    for (const p of this.pieces.values()) if (p.state === 'loose' || p.state === 'flying') looseCount++;
     if (looseCount >= this.cfg.maxLoose) {
       // the oldest untouched loose piece fades first
       let oldest: PieceRec | null = null;
@@ -292,8 +320,13 @@ export class WorldSystems {
       if (oldest) this.removePiece(oldest.id);
     }
     const id = this.nextPieceId++;
-    const rec: PieceRec = { id, type, state: arc ? 'flying' : 'loose', x, y, z, arc, actorPid, touchedAt: now };
+    const rec: PieceRec = { id, type, state: arc ? 'flying' : 'loose', heldBy: -1, x, y, z, arc, actorPid, touchedAt: now };
     this.pieces.set(id, rec);
+    this.putInSchema(rec);
+  }
+
+  private putInSchema(rec: PieceRec): void {
+    const { type, x, y, z, arc } = rec;
     const ps = new PieceState();
     ps.type = type;
     ps.state = rec.state;
@@ -310,12 +343,105 @@ export class WorldSystems {
       ps.t0 = arc.t0;
       ps.landAt = arc.landAt;
     }
-    this.room.state.pieces.set(String(id), ps);
+    this.room.state.pieces.set(String(rec.id), ps);
   }
 
   private removePiece(id: number): void {
     this.pieces.delete(id);
     this.room.state.pieces.delete(String(id));
+  }
+
+  // ---------------------------------------------------------------- pieces held by machines (feature 003)
+
+  /** A loose piece goes onto a machine: out of the schema, never fades, not counted as loose. */
+  holdPiece(id: number, machine: MachineId, state: 'hooked' | 'pallet'): void {
+    const p = this.pieces.get(id);
+    if (!p) return;
+    p.state = state;
+    p.heldBy = machine;
+    p.arc = null;
+    this.room.state.pieces.delete(String(id));
+  }
+
+  /** A new piece straight onto a machine (pallet from a rack). */
+  spawnHeld(type: PieceTypeId, machine: MachineId, state: 'hooked' | 'pallet'): void {
+    const id = this.nextPieceId++;
+    this.pieces.set(id, { id, type, state, heldBy: machine, x: 0, y: 0, z: 0, arc: null, actorPid: '', touchedAt: this.room.now() });
+  }
+
+  heldPieces(machine: MachineId): PieceRec[] {
+    const out: PieceRec[] = [];
+    for (const p of this.pieces.values()) if ((p.state === 'hooked' || p.state === 'pallet') && p.heldBy === machine) out.push(p);
+    return out.sort((a, b) => a.id - b.id);
+  }
+
+  /** A held piece is used up (snapped into a slot, poured, into the hopper). */
+  consumeHeld(id: number): void {
+    this.pieces.delete(id);
+  }
+
+  /** A held piece is set down as a loose piece. */
+  releasePiece(id: number, x: number, z: number, now: number, actorPid: string): void {
+    const p = this.pieces.get(id);
+    if (!p) return;
+    this.pieces.delete(id);
+    this.addPiece(p.type, x, 0, z, now, actorPid, null);
+  }
+
+  addLoose(type: PieceTypeId, x: number, z: number, now: number, actorPid: string): void {
+    this.addPiece(type, x, 0, z, now, actorPid, null);
+  }
+
+  addMixerBag(b: Building): void {
+    b.mixerBags++;
+    this.saveBuilding(b);
+    this.syncPlot(b.plot);
+  }
+
+  emitGround(b: Building): void {
+    this.room.broadcastEvent('ground', { plot: b.plot, dug: b.progress.groundDug, poured: b.progress.groundPoured, done: groundworkDone(b.progress) });
+  }
+
+  /** One concrete bucket into the dug pit (FR-021). The last one completes Groundwork with a short celebration. */
+  pourConcrete(s: Session | null, b: Building, now: number): boolean {
+    const { progress, result } = pour(b.progress);
+    if (result === 'notDug' || result === 'alreadyPoured') return false;
+    b.progress = progress;
+    if (s) s.delivered++;
+    this.saveBuilding(b);
+    this.syncPlot(b.plot);
+    this.emitGround(b);
+    if (result === 'groundworkDone') {
+      this.machines.usage.groundworkDone++;
+      b.celebrateUntil = now + 3000;
+      this.room.broadcastEvent('celebrate', { plot: b.plot, until: b.celebrateUntil });
+    }
+    return true;
+  }
+
+  /** Cement dropped or tossed at a mixer hopper (FR-019). Returns true when handled. */
+  private toHopper(actor: Session | null, plot: number, x: number, z: number, now: number): boolean {
+    const b = this.plots[plot];
+    const crew = !!actor && actor.crewPlot === plot;
+    const bounce = (hint: 'crewOnlyMachine' | 'mixerFull'): void => {
+      if (actor) this.room.sendTo(actor, 'hint', { kind: hint });
+      const spots = SITE.machines[plot]!;
+      const dx = x - spots.mixer.x;
+      const dz = z - spots.mixer.z;
+      const l = Math.hypot(dx, dz) || 1;
+      const at = setDownSpot(spots.mixer.x + (dx / l) * 2.2, spots.mixer.z + (dz / l) * 2.2, this.machines.ctxFor(plot));
+      this.addPiece('cement', at.x, 0, at.z, now, actor?.pid ?? '', null);
+    };
+    if (!b || !crew) {
+      bounce('crewOnlyMachine');
+      return true;
+    }
+    if (b.mixerBags >= MACHINE.mixer.capacity || b.mixerMixUntil > 0) {
+      bounce('mixerFull');
+      return true;
+    }
+    this.addMixerBag(b);
+    return true;
   }
 
   /**
@@ -324,18 +450,32 @@ export class WorldSystems {
    */
   private resolve(actor: Session | null, type: PieceTypeId, x: number, z: number, now: number): void {
     if (x * x + z * z > SITE.playRadius * SITE.playRadius || inPlaza(SITE, x, z)) return;
+    if (type === 'cement') {
+      const hopper = this.machines.hopperAt(x, z);
+      if (hopper >= 0 && this.toHopper(actor, hopper, x, z, now)) return;
+    }
     let zone = plotAtZone(SITE, x, z);
     const binPlot = plotAtBin(SITE, x, z);
     const zb = zone >= 0 ? this.plots[zone] : null;
     if (zone >= 0 && !zb) zone = -1; // a free plot pad is just ground
     const isCrew = actor !== null && zone >= 0 && actor.crewPlot === zone;
-    if (zone >= 0 && zb && isCrew && zb.state === 'building' && type !== 'cone') {
-      return this.deliverPiece(actor as Session, zb, type, x, z, now);
+    if (zone >= 0 && zb && isCrew && zb.state === 'building' && type === 'concrete') {
+      // the footing accepts concrete once the pit is dug (FR-021)
+      if (this.pourConcrete(actor as Session, zb, now)) return;
+      const part = groundworkPart(zb.progress);
+      if (actor) this.room.sendTo(actor, 'hint', part === 'dig' ? { kind: 'groundworkFirst', part: 'dig' } : { kind: 'wrongPiece', needed: neededPiece(zb.progress) ?? 'beam' });
+      return this.pushOut(zb.plot, type, x, z, now, actor);
+    }
+    if (zone >= 0 && zb && isCrew && zb.state === 'building' && type !== 'cone' && type !== 'cement') {
+      this.deliverPiece(actor as Session, zb, type, x, z, now);
+      return;
     }
     if (zone >= 0 && zb && isCrew) {
       // wrong piece (or the tower is finished): bounce out with a hint for the actor only
+      const part = groundworkPart(zb.progress);
       const needed = neededPiece(zb.progress);
-      if (actor && needed) this.room.sendTo(actor, 'hint', { kind: 'wrongPiece', needed });
+      if (actor && part && zb.state === 'building') this.room.sendTo(actor, 'hint', { kind: 'groundworkFirst', part });
+      else if (actor && needed) this.room.sendTo(actor, 'hint', { kind: 'wrongPiece', needed });
       return this.pushOut(zb.plot, type, x, z, now, actor);
     }
     const target = binPlot >= 0 && this.plots[binPlot] ? binPlot : zone;
@@ -372,14 +512,37 @@ export class WorldSystems {
     this.addPiece(type, px, 0, pz, now, actor?.pid ?? '', null);
   }
 
-  private deliverPiece(s: Session, b: Building, type: PieceTypeId, _x: number, _z: number, now: number): void {
+  /**
+   * One delivery through the shared rules (`via` hand, forklift or crane). On refusal the piece goes
+   * beside the plot (groundworkFirst, wrongPiece) or to the foot of the tower (tooHigh) with a hint,
+   * unless `quiet` (the forklift places its own leftovers). Returns true when a slot was filled.
+   */
+  deliverPiece(s: Session, b: Building, type: PieceTypeId, _x: number, _z: number, now: number, via: Via = 'hand', slot?: { high: boolean }, quiet = false): boolean {
     if (s.crewPlot !== b.plot) this.audit.nonCrewSnaps++;
-    const { progress, result } = deliver(b.progress, type, CLOCK_TOWER);
+    const { progress, result } = deliver(b.progress, type, via, slot, CLOCK_TOWER);
+    if (result === 'groundworkFirst') {
+      if (quiet) return false;
+      this.room.sendTo(s, 'hint', { kind: 'groundworkFirst', part: groundworkPart(b.progress) ?? 'dig' });
+      this.pushOut(b.plot, type, _x, _z, now, s);
+      return false;
+    }
+    if (result === 'tooHigh') {
+      if (quiet) return false;
+      // set down at the foot of the tower (FR-024)
+      this.room.sendTo(s, 'hint', { kind: 'tooHigh' });
+      const d = SITE.plots[b.plot]!;
+      const at = setDownSpot(d.x + d.s * (d.towerHalf + 0.6), d.z + d.c * (d.towerHalf + 0.6), this.machines.ctxFor(b.plot));
+      this.addPiece(type, at.x, 0, at.z, now, s.pid, null);
+      return false;
+    }
     if (result === 'wrongPiece' || result === 'alreadyComplete') {
+      if (quiet) return false;
       const needed = neededPiece(b.progress);
       if (needed) this.room.sendTo(s, 'hint', { kind: 'wrongPiece', needed });
-      return this.pushOut(b.plot, type, _x, _z, now, s);
+      this.pushOut(b.plot, type, _x, _z, now, s);
+      return false;
     }
+    if (via !== 'crane' && (progress.highFilled > b.progress.highFilled)) this.machines.audit.highFilledByHand++;
     b.progress = progress;
     const st = currentStage(progress, CLOCK_TOWER);
     if (st && progress.filledSlots >= st.slotCount) this.audit.overfilledSlots++;
@@ -397,8 +560,9 @@ export class WorldSystems {
     this.syncPlot(b.plot);
     this.saveBuilding(b);
     this.refreshBlockers();
-    this.room.broadcastEvent('snap', { plot: b.plot, result, by: s.pid, pieceType: type });
+    this.room.broadcastEvent('snap', { plot: b.plot, result, by: s.pid, pieceType: type, via });
     if (result === 'masterpiece') this.room.broadcastEvent('celebrate', { plot: b.plot, until: b.celebrateUntil });
+    return true;
   }
 
   private tickPieces(now: number): void {
@@ -458,7 +622,7 @@ export class WorldSystems {
     const b: Building = {
       plot: a.index, state: 'building', blueprintId: CLOCK_TOWER.id, progress: initialProgress(CLOCK_TOWER), hostName: s.name,
       crew: { joinMode: 'ask', members: [{ keyHash: s.keyHash, pid: s.pid, name: s.name, hatColor: s.hatColor, joinedAt: now, role: 'host' }] },
-      emptySince: null, finishedAt: null, bin: [], celebrateUntil: 0, dissolveAt: 0,
+      emptySince: null, finishedAt: null, bin: [], celebrateUntil: 0, dissolveAt: 0, mixerBags: 0, mixerMixUntil: 0,
     };
     this.plots[a.index] = b;
     this.setSessionCrew(s, a.index, 'host');
@@ -471,6 +635,7 @@ export class WorldSystems {
   private clearPlot(plot: number): void {
     const b = this.plots[plot];
     if (!b) return;
+    this.machines.putOutPlot(plot, this.shift.phase === 'resetting' ? 'shiftReset' : 'leftCrew');
     for (const m of b.crew.members) {
       const ms = m.pid ? this.room.sessions.get(m.pid) : undefined;
       if (ms) this.setSessionCrew(ms, -1, '');
@@ -482,11 +647,12 @@ export class WorldSystems {
     this.refreshBlockers();
   }
 
-  private saveBuilding(b: Building): void {
+  saveBuilding(b: Building): void {
     const host = hostOf(b.crew);
     this.repo.saveBuilding(this.shift.epoch, {
       plot: b.plot, state: b.state, blueprintId: b.blueprintId, progress: b.progress, hostKeyHash: host?.keyHash ?? null,
       hostName: b.hostName, joinMode: b.crew.joinMode, emptySince: b.emptySince, finishedAt: b.finishedAt, crew: b.crew.members, bin: b.bin,
+      mixerBags: b.mixerBags,
     });
   }
 
@@ -505,6 +671,12 @@ export class WorldSystems {
       ps.crewSize = 0;
       ps.bin.clear();
       ps.finishedAt = 0;
+      ps.groundDug = 0;
+      ps.groundPoured = 0;
+      ps.highFilled = 0;
+      ps.mixerBags = 0;
+      ps.mixerMixUntil = 0;
+      this.machines.syncMixerLoad(plot);
       return;
     }
     const host = hostOf(b.crew);
@@ -522,6 +694,12 @@ export class WorldSystems {
       for (const t of types) ps.bin.push(t);
     }
     ps.finishedAt = b.finishedAt ?? 0;
+    ps.groundDug = b.progress.groundDug;
+    ps.groundPoured = b.progress.groundPoured;
+    ps.highFilled = b.progress.highFilled;
+    ps.mixerBags = b.mixerBags;
+    ps.mixerMixUntil = b.mixerMixUntil;
+    this.machines.syncMixerLoad(plot);
   }
 
   // ------------------------------------------------------------------ crews
@@ -638,7 +816,10 @@ export class WorldSystems {
         const ts = this.room.sessions.get(m.member);
         removeMember(b.crew, target);
         this.cooldowns.set(`${target.keyHash}:${b.plot}`, now + this.t.denyCooldownS * 1000);
-        if (ts) this.setSessionCrew(ts, -1, '');
+        if (ts) {
+          if (ts.machine >= 0) this.machines.exit(ts, 'leftCrew');
+          this.setSessionCrew(ts, -1, '');
+        }
         this.syncPlot(b.plot);
         this.saveBuilding(b);
         this.notifyCrew(b, 'removed', m.member, ts);
@@ -674,6 +855,7 @@ export class WorldSystems {
   }
 
   private leaveCrew(s: Session, kind: 'left' | 'removed'): void {
+    if (s.machine >= 0) this.machines.exit(s, s.state === 'active' ? 'leftCrew' : 'disconnect');
     const b = this.plots[s.crewPlot];
     this.setSessionCrew(s, -1, '');
     if (!b) return;
@@ -736,6 +918,7 @@ export class WorldSystems {
       }
       if (b.state === 'finished' && b.dissolveAt && now >= b.dissolveAt) {
         // the Masterpiece stays standing; the crew is free to start or join another building
+        this.machines.putOutPlot(b.plot, 'leftCrew');
         for (const m of b.crew.members) {
           const ms = m.pid ? this.room.sessions.get(m.pid) : undefined;
           if (ms) this.setSessionCrew(ms, -1, '');
@@ -873,6 +1056,7 @@ export class WorldSystems {
   resetShift(now: number): void {
     const epoch = this.shift.epoch;
     const worldTowers = this.shift.towersCompleted;
+    for (const s of this.room.sessions.values()) if (s.machine >= 0) this.machines.exit(s, 'shiftReset');
     for (let i = 0; i < this.plots.length; i++) if (this.plots[i]) this.clearPlot(i);
     for (const id of [...this.pieces.keys()]) this.removePiece(id);
     this.requests.clear();
@@ -895,6 +1079,7 @@ export class WorldSystems {
     this.repo.saveWorld(this.worldRow());
     this.syncShift();
     this.refreshBlockers();
+    this.machines.reset(); // every machine back to its parking spot (FR-035)
   }
 
   // ------------------------------------------------------------------ dev cheats (HHT_DEV_CHEATS=1 only)
@@ -910,6 +1095,7 @@ export class WorldSystems {
       case 'teleport': {
         const { x, y, z } = m as unknown as { x: number; y: number; z: number };
         if ([x, y, z].every((v) => typeof v === 'number' && Number.isFinite(v))) {
+          if (s.machine >= 0) this.machines.exit(s, 'jump');
           teleport(s, x, y, z);
           this.room.sendTo(s, 'correction', { reason: 'respawn' });
         }
@@ -920,10 +1106,26 @@ export class WorldSystems {
         if (!b || b.state !== 'building') return;
         const stage = currentStage(b.progress, CLOCK_TOWER);
         if (!stage) return;
-        const n = stage.slotCount - b.progress.filledSlots;
-        for (let i = 0; i < n && !isMasterpiece(b.progress); i++) this.deliverPiece(s, b, stage.pieceType, SITE.plots[b.plot]!.x, SITE.plots[b.plot]!.z, now);
+        if (!groundworkDone(b.progress)) b.progress = { ...b.progress, groundDug: CLOCK_TOWER.groundwork.scoops, groundPoured: CLOCK_TOWER.groundwork.concrete };
+        const start = b.progress.completedStages;
+        for (let i = 0; i < 40 && b.progress.completedStages === start && !isMasterpiece(b.progress); i++) {
+          const high = b.progress.filledSlots - b.progress.highFilled >= stage.slotCount - stage.highSlots;
+          this.deliverPiece(s, b, stage.pieceType, SITE.plots[b.plot]!.x, SITE.plots[b.plot]!.z, now, high ? 'crane' : 'hand', { high });
+        }
         return;
       }
+      case 'fillGround': {
+        const b = this.plots[Number(m.plot)];
+        if (!b || groundworkDone(b.progress)) return;
+        b.progress = { ...b.progress, groundDug: CLOCK_TOWER.groundwork.scoops, groundPoured: CLOCK_TOWER.groundwork.concrete };
+        this.saveBuilding(b);
+        this.syncPlot(b.plot);
+        this.emitGround(b);
+        return;
+      }
+      case 'machinePose':
+        this.machines.devPose(Number(m.id), m.pose as never);
+        return;
       case 'endShiftIn': {
         const sec = Number(m.seconds);
         if (Number.isFinite(sec) && sec >= 0) {
@@ -946,10 +1148,12 @@ export class WorldSystems {
 
   tick(now: number): void {
     this.tickPieces(now);
+    this.machines.tick(now);
   }
 
   second(now: number): void {
     this.secondCrews(now);
+    this.machines.second(now);
     this.secondShift(now);
     if (now - this.lastPurge > 86_400_000) {
       this.lastPurge = now;

@@ -1,7 +1,9 @@
 import * as THREE from 'three';
 import {
-  ANIM, CLOSE, HAT_COLORS, NET, PIECE_TYPES, SITE, initialWorker, towerBlocker,
-  type ObstacleBox, type PieceTypeId, type ServerEvents, type Snapshot,
+  ANIM, CLOSE, HAT_COLORS, LOAD_DIRT, LOAD_PALLET, MACHINE, NET, PIECE_TYPES, SITE, carryFromCode, exitSpot, initialWorker, isPieceTypeId,
+  kindOfMachine, machineCtx, plotOfMachine, seatPose, seqDiff, towerBlocker, wrapAngle,
+  type MachineCtx, type MachineKind, type MachineLoad, type MachineState, type ObstacleBox, type OwnMachine, type PieceTypeId,
+  type ServerEvents, type Snapshot,
 } from '@hht/shared';
 import type { AssetStore } from '../assets/loader.ts';
 import { Sfx } from '../audio/sfx.ts';
@@ -15,8 +17,12 @@ import { TouchControls } from '../input/touch.ts';
 import { NetConnection } from '../net/connection.ts';
 import { EntityBuffer, type Pose } from '../net/interpolation.ts';
 import { matchmake } from '../net/matchmake.ts';
-import { Predictor } from '../net/prediction.ts';
+import { InputStream, MachinePredictor, Predictor } from '../net/prediction.ts';
+import { MachineRenderer, type MachineDraw } from '../machines/MachineRenderer.ts';
+import { MachineViews, type MachineViewPose } from '../machines/machineViews.ts';
+import type { MachinePose } from '../machines/rig.ts';
 import { FollowCamera } from '../player/followCamera.ts';
+import { MachineCameras } from '../player/machineCameras.ts';
 import { WorkerView, type WorkerPose } from '../player/workerView.ts';
 import type { ProfileStore } from '../profile/guestProfile.ts';
 import { Bloom } from '../render/bloom.ts';
@@ -30,7 +36,8 @@ import { SiteView } from '../world/site.ts';
 import { GameShell } from './GameShell.ts';
 import { drawRackDisplays } from './netWorld.ts';
 
-const POSE_OF_ANIM: Record<number, CrowdPose> = { 0: 'idle', 1: 'walk', 2: 'run', 3: 'air', 4: 'cheer', 5: 'wave' };
+const POSE_OF_ANIM: Record<number, CrowdPose> = { 0: 'idle', 1: 'walk', 2: 'run', 3: 'air', 4: 'cheer', 5: 'wave', 6: 'seated' };
+const MACHINE_COUNT = SITE.machines.length * 4;
 
 export interface Bubble {
   text: string;
@@ -58,7 +65,24 @@ export class NetGame extends GameShell {
   labels!: LabelLayer;
   hud!: NetHud;
   touch: TouchControls | null = null;
+  /** one seq'd input stream for the worker and the machine predictors (feature 003) */
+  readonly stream = new InputStream();
   predictor: Predictor;
+  /** the operated machine (feature 003), predicted like the worker; null while walking */
+  machinePred: MachinePredictor | null = null;
+  seatedId = -1;
+  /** seq of a predicted jump-exit the server has not acknowledged yet (-1 = none) */
+  private pendingExitSeq = -1;
+  private exitFallbackAt = 0;
+  /** while waiting for a `machine enter` answer, walking inputs are neutral */
+  enteringUntil = 0;
+  private readonly actTimes: number[] = [];
+  readonly machineViews = new MachineViews();
+  machines!: MachineRenderer;
+  machineCams!: MachineCameras;
+  /** this frame's machine poses (interpolated remotes, the predicted own machine) */
+  readonly machinePoses: MachineViewPose[] = Array.from({ length: MACHINE_COUNT }, (_, id) => ({ id, kind: kindOfMachine(id), x: 0, z: 0, yaw: 0, p1: 0, p2: 0, p3: 0, phase: 'idle', operator: false, loadCode: 0 }));
+  private readonly machineDraws: MachineDraw[] = [];
   readonly remotes = new Map<number, EntityBuffer>();
   me = '';
   myNetId = 0;
@@ -89,7 +113,7 @@ export class NetGame extends GameShell {
     this.profile = profile;
     this.hudRoot = hudRoot;
     this.conn = conn;
-    this.predictor = new Predictor(initialWorker(SITE.spawn), SITE);
+    this.predictor = new Predictor(initialWorker(SITE.spawn), SITE, this.stream);
     configureOutlines(quality.outlineWidthPx, quality.outlineDistance);
   }
 
@@ -113,6 +137,11 @@ export class NetGame extends GameShell {
     scene.add(this.pieceRenderer.group);
     this.camera = new FollowCamera(camera);
     this.camera.yaw = 0;
+    this.machineCams = new MachineCameras(this.camera);
+    this.machines = new MachineRenderer(this.assets, { outlines: this.quality.outlines, shadows: this.quality.tier === 'high', nearDist: 20 });
+    scene.add(this.machines.group);
+    // the machine models stream in after play starts (FR-038): placeholders until then
+    window.setTimeout(() => this.machines.loadModels(), 1200);
     this.labels = new LabelLayer(this.hudRoot);
     this.hud = new NetHud(this.hudRoot, {
       onShuffleName: () => {
@@ -137,8 +166,12 @@ export class NetGame extends GameShell {
       onOpen: (open) => {
         if (open) this.actions.releaseAll();
       },
+      onMachineHelp: () => this.emit('machineHelp'),
     }, prof.muted, prof.hideAllChat);
     this.sfx.setMuted(prof.muted);
+    // feature 003: generated samples and the music stream in after play starts
+    window.setTimeout(() => void this.sfx.loadSamples(), 800);
+    this.sfx.startMusic();
     const canvas = this.ctx.renderer.domElement;
     attachKeyboardMouse(this.actions, canvas, () => this.sfx.unlock());
     canvas.addEventListener('hht-zoom', (e) => this.camera.zoom((e as CustomEvent<number>).detail));
@@ -183,7 +216,10 @@ export class NetGame extends GameShell {
 
   private onSnapshot(s: Snapshot): void {
     this.lastSnapshotPerf = performance.now();
-    if (this.snapNext) {
+    for (const m of s.machines) this.machineViews.push(s.serverTime, m);
+    if (this.ownMachineSnapshot(s)) {
+      // seated (or a predicted exit not yet applied): the worker pose comes from the seat
+    } else if (this.snapNext) {
       this.predictor.snapTo(s.own, s.ackSeq);
       this.snapNext = false;
     } else {
@@ -198,6 +234,154 @@ export class NetGame extends GameShell {
       }
       b.push(s.serverTime, e);
     }
+  }
+
+  // ---------------------------------------------------------------- machines (feature 003)
+
+  /** Handles the own-machine block. Returns true when the worker state must not be reconciled. */
+  private ownMachineSnapshot(s: Snapshot): boolean {
+    const om = s.ownMachine;
+    if (this.machinePred) {
+      if (om && om.id === this.seatedId) {
+        this.machinePred.reconcile(s.ackSeq, this.ownToState(om));
+        return true;
+      }
+      // the server put us out (idle, crew change, disconnect, shift reset) or seated us elsewhere
+      this.leaveMachineMode();
+      if (om) {
+        this.enterMachineMode(om);
+        return true;
+      }
+      this.predictor.snapTo(s.own);
+      this.snapNext = false;
+      return true;
+    }
+    if (this.pendingExitSeq >= 0) {
+      if (seqDiff(s.ackSeq, this.pendingExitSeq) < 0) return true; // the server has not reached our exit yet
+      this.pendingExitSeq = -1;
+      if (!om) return false;
+    }
+    if (om) {
+      this.enterMachineMode(om);
+      return true;
+    }
+    return false;
+  }
+
+  /** Machine state from the own block; loads come from the code plus the schema (pallet types, mixer bags). */
+  ownToState(om: OwnMachine): MachineState {
+    const plot = this.conn.state.plots[plotOfMachine(om.id)];
+    const kind = kindOfMachine(om.id);
+    let load: MachineLoad = { kind: 'none' };
+    if (kind === 'mixer') load = { kind: 'bags', count: plot?.mixerBags ?? 0 };
+    else if (om.loadCode === LOAD_DIRT) load = { kind: 'dirt' };
+    else if (om.loadCode === LOAD_PALLET) load = { kind: 'pallet', pieces: Array.from(plot?.palletTypes ?? []).filter(isPieceTypeId) };
+    else if (om.loadCode > 0) {
+      const piece = carryFromCode(om.loadCode);
+      if (piece) load = { kind: 'hook', piece };
+    }
+    return { id: om.id, kind, x: om.x, z: om.z, yaw: om.yaw, p1: om.p1, p2: om.p2, p3: om.p3, phase: om.phase, phaseT: om.phaseT, load };
+  }
+
+  machineCtxFor(plot: number): MachineCtx {
+    return machineCtx(SITE, plot, this.blockers, this.conn.state.plots[plot]?.completedStages ?? 0);
+  }
+
+  private enterMachineMode(om: OwnMachine): void {
+    const state = this.ownToState(om);
+    const plot = plotOfMachine(om.id);
+    this.machinePred = new MachinePredictor(state, this.stream, () => this.machineCtxFor(plot));
+    this.machinePred.snapTo(state);
+    this.predictor.clearHistory();
+    this.seatedId = om.id;
+    this.enteringUntil = 0;
+    this.actTimes.length = 0;
+    this.machineCams.enter(state.kind);
+    this.emit('machineEntered', state.kind);
+  }
+
+  private leaveMachineMode(): void {
+    if (!this.machinePred) return;
+    const kind = this.machinePred.state.kind;
+    this.machinePred = null;
+    this.seatedId = -1;
+    this.machineCams.exit();
+    this.emit('machineLeft', kind);
+  }
+
+  /** Jump in a machine: predicted get-out at this exact input step (the server applies the same step). */
+  private exitMachine(): void {
+    const mp = this.machinePred;
+    if (!mp) return;
+    const ctx = mp.context;
+    const st = mp.state;
+    this.pendingExitSeq = mp.exitInput();
+    const e = exitSpot(st, ctx);
+    this.leaveMachineMode();
+    this.predictor.snapTo({ ...initialWorker({ x: e.x, y: 0, z: e.z }, e.yaw), carrying: null });
+    this.camera.yaw = e.yaw + Math.PI;
+    this.exitFallbackAt = performance.now() + 600;
+  }
+
+  /** Action presses beyond 4 per second are dropped (the server ignores them too). */
+  private actOk(now: number): boolean {
+    while (this.actTimes.length && (this.actTimes[0] as number) < now - 1000) this.actTimes.shift();
+    if (this.actTimes.length >= MACHINE.actPerSecond) return false;
+    this.actTimes.push(now);
+    return true;
+  }
+
+  /** The own machine as rendered: interpolated between steps, with the correction offset. */
+  private ownMachinePose(out: MachineViewPose): MachineViewPose {
+    const p = this.machinePred as MachinePredictor;
+    const k = p.alpha;
+    const a = p.prev;
+    const b = p.state;
+    out.id = b.id;
+    out.kind = b.kind;
+    out.x = a.x + (b.x - a.x) * k + p.offset.x;
+    out.z = a.z + (b.z - a.z) * k + p.offset.z;
+    out.yaw = a.yaw + wrapAngle(b.yaw - a.yaw) * k;
+    out.p1 = b.kind === 'forklift' ? a.p1 + (b.p1 - a.p1) * k : a.p1 + wrapAngle(b.p1 - a.p1) * k;
+    out.p2 = a.p2 + (b.p2 - a.p2) * k;
+    out.p3 = a.p3 + (b.p3 - a.p3) * k;
+    out.phase = b.phase;
+    out.operator = true;
+    out.loadCode = 0;
+    return out;
+  }
+
+  /** Samples every machine for this frame into `machinePoses` and draws them. */
+  private drawMachines(serverNow: number): void {
+    const st = this.conn.state;
+    const draws = this.machineDraws;
+    draws.length = 0;
+    for (let id = 0; id < MACHINE_COUNT; id++) {
+      const pose = this.machinePoses[id] as MachineViewPose;
+      if (id === this.seatedId && this.machinePred) this.ownMachinePose(pose);
+      else this.machineViews.sample(id, serverNow, this.ownPos.x, this.ownPos.z, pose);
+      const plot = plotOfMachine(id);
+      const pv = st.plots[plot];
+      const hookType = pv?.hookType ?? '';
+      draws.push({
+        pose, spots: SITE.machines[plot]!,
+        hook: pose.kind === 'crane' && isPieceTypeId(hookType) ? hookType : null,
+        pallet: pose.kind === 'forklift' && pv ? (Array.from(pv.palletTypes).filter(isPieceTypeId) as PieceTypeId[]) : [],
+      });
+    }
+    const r = this.pieceRenderer;
+    this.machines.draw(draws, this.ctx.camera.position, (t, m) => r.add(t, m), (t) => r.halfHeight.get(t) ?? 0.15);
+  }
+
+  /** Seat of a machine as currently drawn (remote operators sit in the interpolated machine). */
+  seatOf(id: number): { x: number; y: number; z: number; yaw: number } | null {
+    const pose = this.machinePoses[id];
+    if (!pose) return null;
+    return seatPose({ ...pose, phase: 'idle', phaseT: 0, load: { kind: 'none' } }, SITE.machines[plotOfMachine(id)]!);
+  }
+
+  get myMachineKind(): MachineKind | null {
+    return this.machinePred?.state.kind ?? null;
   }
 
   private onClosed(code: number): void {
@@ -241,6 +425,9 @@ export class NetGame extends GameShell {
         const conn = new NetConnection(mm);
         await conn.connect(mm);
         this.remotes.clear();
+        this.machineViews.clear();
+        this.leaveMachineMode();
+        this.pendingExitSeq = -1;
         this.attach(conn);
         this.reconnecting = false;
         this.hud.showToast(mm.redirected ? 'That site is full — you’ve been sent to a nearby one' : 'Back on site!', 2.5);
@@ -284,6 +471,9 @@ export class NetGame extends GameShell {
     return false;
   }
 
+  /** Hook (feature 003): per-frame machine UI while seated (labels, hints). */
+  protected onMachine(_dt: number, _blocked: boolean): void {}
+
   protected step(dt: number, now: number): void {
     const a = this.actions;
     pollGamepad(a);
@@ -298,21 +488,41 @@ export class NetGame extends GameShell {
     this.camera.basis(this.fwd, this.right);
     let dx = 0;
     let dz = 0;
-    if (!blocked) {
-      dx = this.fwd.x * a.move.y + this.right.x * a.move.x;
-      dz = this.fwd.z * a.move.y + this.right.z * a.move.x;
-      if (a.wasPressed('jump')) this.predictor.requestJump();
+    const mp = this.machinePred;
+    if (mp) {
+      // in a machine the same inputs are re-mapped (contracts/controls.md): move drives, action acts,
+      // jump gets out, toss switches the crane camera
+      if (!blocked && a.wasPressed('jump')) this.exitMachine();
+      else {
+        const act = !blocked && a.wasPressed('action') && this.actOk(now);
+        const alt = !blocked && a.wasPressed('toss');
+        if (alt) this.machineCams.toggle();
+        mp.update(dt, blocked ? 0 : a.move.x, blocked ? 0 : a.move.y, act, alt);
+        if (act) this.emit('machineAct');
+      }
+    } else {
+      const entering = this.enteringUntil > now;
+      if (!blocked && !entering) {
+        dx = this.fwd.x * a.move.y + this.right.x * a.move.x;
+        dz = this.fwd.z * a.move.y + this.right.z * a.move.x;
+        if (a.wasPressed('jump')) this.predictor.requestJump();
+      }
+      const before = this.predictor.state.grounded;
+      this.predictor.update(dt, dx, dz, !blocked && !entering && a.run, this.blockers);
+      if (before && !this.predictor.state.grounded && this.predictor.state.vy > 3) {
+        this.worker.jumped();
+        this.sfx.play('jump');
+      }
     }
-    const before = this.predictor.state.grounded;
-    this.predictor.update(dt, dx, dz, !blocked && a.run, this.blockers);
-    if (before && !this.predictor.state.grounded && this.predictor.state.vy > 3) {
-      this.worker.jumped();
-      this.sfx.play('jump');
+    // reliable fallback for the in-stream exit (sent only if the server still has us seated)
+    if (this.exitFallbackAt && performance.now() > this.exitFallbackAt) {
+      this.exitFallbackAt = 0;
+      if ((this.conn.state.players.get(this.me)?.machine ?? -1) >= 0 && !this.machinePred) this.conn.send('machine', { op: 'exit' });
     }
     this.sendAcc += dt;
     if (this.sendAcc >= NET.tickMs / 1000) {
       this.sendAcc = 0;
-      for (const b of this.predictor.takeBatches()) this.conn.sendInputs(b);
+      for (const b of this.stream.takeBatches()) this.conn.sendInputs(b);
     }
     // respawn: hold R 0.5 s
     this.respawnHeld = !blocked && a.isHeld('respawn') ? this.respawnHeld + dt : 0;
@@ -320,27 +530,42 @@ export class NetGame extends GameShell {
       this.respawnHeld = 0;
       this.conn.send('respawn', {});
     }
-    if (!blocked) this.onAction(this.predictor.state.carrying !== null);
+    if (!blocked && !this.machinePred) this.onAction(this.predictor.state.carrying !== null);
+    if (this.machinePred) this.onMachine(dt, blocked);
 
-    // own worker visual
+    const serverNow = this.conn.clock.serverNow();
+    // own worker visual (seated: in the predicted cab)
     const p = this.predictor;
     const k = p.alpha;
-    this.ownPos.set(
-      p.prev.x + (p.state.x - p.prev.x) * k + p.offset.x,
-      p.prev.y + (p.state.y - p.prev.y) * k + p.offset.y,
-      p.prev.z + (p.state.z - p.prev.z) * k + p.offset.z,
-    );
+    let pose: WorkerPose;
+    let hs = 0;
+    let carry: PieceTypeId | null = null;
+    if (this.machinePred) {
+      const mpose = this.ownMachinePose(this.machinePoses[this.seatedId] as MachineViewPose);
+      const seat = seatPose({ ...mpose, phase: 'idle', phaseT: 0, load: { kind: 'none' } }, SITE.machines[plotOfMachine(this.seatedId)]!);
+      this.ownPos.set(seat.x, seat.y, seat.z);
+      this.worker.root.rotation.y = seat.yaw;
+      pose = 'seated';
+    } else {
+      this.ownPos.set(
+        p.prev.x + (p.state.x - p.prev.x) * k + p.offset.x,
+        p.prev.y + (p.state.y - p.prev.y) * k + p.offset.y,
+        p.prev.z + (p.state.z - p.prev.z) * k + p.offset.z,
+      );
+      this.worker.root.rotation.y = p.state.facing;
+      hs = Math.hypot(p.state.vx, p.state.vz);
+      pose = this.ownPose(hs);
+      carry = p.state.carrying;
+    }
     this.worker.root.position.copy(this.ownPos);
-    this.worker.root.rotation.y = p.state.facing;
-    const hs = Math.hypot(p.state.vx, p.state.vz);
-    const pose: WorkerPose = this.ownPose(hs);
-    const carry = p.state.carrying;
     this.worker.update(dt, pose, hs, carry ? PIECE_TYPES[carry].carryPose : null);
-    this.camera.update(dt, this.ownPos);
+    if (this.machinePred && this.machineCams.active) {
+      const mpose = this.machinePoses[this.seatedId] as MachineViewPose;
+      this.machineCams.update(dt, this.ctx.camera, mpose, SITE.machines[plotOfMachine(this.seatedId)]!, a.move);
+    } else this.camera.update(dt, this.ownPos);
     this.followSun(this.ownPos);
 
     // remote workers
-    const serverNow = this.conn.clock.serverNow();
     const crowd = this.crowdEntries;
     crowd.length = 0;
     const labels = this.labelEntries;
@@ -358,6 +583,16 @@ export class NetGame extends GameShell {
       buf.updateDelay(dt * 1000);
       if (!buf.sample(serverNow, this.tmpPose)) return;
       const tp = this.tmpPose;
+      // an operator sits in the machine as drawn this frame (no lag between the two)
+      const seat = (pl.machine ?? -1) >= 0 ? this.seatOf(pl.machine) : null;
+      if (seat) {
+        tp.x = seat.x;
+        tp.y = seat.y;
+        tp.z = seat.z;
+        tp.yaw = seat.yaw;
+        tp.anim = ANIM.seated;
+        tp.carry = null;
+      }
       const d = Math.hypot(tp.x - camPos.x, tp.y - camPos.y, tp.z - camPos.z);
       crowd.push({
         key: pl.netId, x: tp.x, y: tp.y, z: tp.z, yaw: tp.yaw,
@@ -371,6 +606,7 @@ export class NetGame extends GameShell {
     r.begin();
     this.drawRacks();
     this.crowd.update(dt, crowd, (type, m) => r.add(type, m));
+    this.drawMachines(serverNow);
     if (carry) {
       this.worker.root.updateMatrixWorld();
       r.add(carry, carryMatrixFor(carry, this.worker.root.matrixWorld, this.tmpM));

@@ -17,7 +17,12 @@ The layout is unchanged: per-step bytes `dx i8, dz i8, flags u8`. The flags byte
 | 3 | `alt` | ignored | client-only (crane camera toggle). The server ignores it |
 
 A flags value above 15 fails validation and counts as a strike. Every `act` edge after the 4th
-within the same second is ignored, with no strike.
+within the same second (60 steps) is ignored, with no strike.
+
+**Directions (implementation note)**: while operating, `dx`/`dz` are the raw stick axes ×127
+(`dx` = right, `dz` = forward), so a diagonal such as W+D is (127, 127). The decoder therefore
+accepts the full square −127..127 per axis (only −128 is rejected). Walking is unaffected:
+`stepWorker()` normalizes a wish vector longer than 1.
 
 ## 2. New client → server message
 
@@ -81,8 +86,10 @@ machines    count u8 | count × 12 B machine records
 | 5 | yaw u8 (256 steps) |
 | 6–7 | p1 i16 (mrad, or mm for lengths) |
 | 8–9 | p2 i16 (same units) |
-| 10 | p3 u8 (cm for the hook height, 0–255) |
+| 10 | p3 u8 in decimetres (0–25.5 m: the crane hook height runs up to ~12.8 m; other kinds ≥ 0 only) |
 | 11 | flags: bit0 operator present, bits1–4 load code (0 none, 1–9 piece type, 10 dirt, 11 pallet), bits5–6 phase (idle, lowering, raising, working) |
+
+Mixer bags are not in the load code: the client reads them from the schema (`mixerBags`).
 
 **Sending rule**: a machine is included for a receiver when it is due under that receiver's interest
 tier (`tierFor` on the distance from the receiver to the machine, `isDue(tier, tick, 4096 + id)`)

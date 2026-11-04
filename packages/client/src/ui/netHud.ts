@@ -9,6 +9,8 @@ export interface NetMenuHandlers {
   onInvite(): void;
   onPeople(): void;
   onToggleHideChat(): boolean;
+  /** feature 003: show the machine control card again ("?") */
+  onMachineHelp?(): void;
   onOpen(open: boolean): void;
 }
 
@@ -67,6 +69,12 @@ export class NetHud {
       handlers.onRespawn();
       this.setMenu(false);
     });
+    if (handlers.onMachineHelp) {
+      button('❓  Machine controls', panel, () => {
+        this.setMenu(false);
+        handlers.onMachineHelp?.();
+      });
+    }
     button('▶  Keep playing', panel, () => this.setMenu(false));
     this.menu.addEventListener('pointerdown', (e) => {
       if (e.target === this.menu) this.setMenu(false);
@@ -100,12 +108,18 @@ export class NetHud {
     this.toastTimer = window.setTimeout(() => this.toastEl.classList.add('hidden'), seconds * 1000);
   }
 
-  setPrompt(text: string | null, key = 'E'): void {
-    const t = text ?? '';
+  /** The action prompt; `disabled` greys it out (e.g. "Crew only", "Move closer to the pit"). */
+  setPrompt(text: string | null, key = 'E', disabled = false): void {
+    const t = text ? `${key}|${disabled ? 1 : 0}|${text}` : '';
     if (t === this.promptText) return;
     this.promptText = t;
     this.prompt.classList.toggle('hidden', !text);
+    this.prompt.classList.toggle('disabled', disabled);
     if (text) this.prompt.innerHTML = `<kbd>${key}</kbd>${text}`;
+  }
+
+  get promptValue(): string {
+    return this.promptText.split('|').slice(2).join('|');
   }
 
   setFps(text: string | null): void {

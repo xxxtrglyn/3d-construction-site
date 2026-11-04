@@ -1,5 +1,6 @@
-import type { PieceTypeId } from '@hht/shared';
+import { kindOfMachine, plotOfMachine, type PieceTypeId } from '@hht/shared';
 import type { NetGame } from '../game/NetGame.ts';
+import type { NetPlay } from '../game/NetPlay.ts';
 import { QUALITY } from '../render/quality.ts';
 
 /** window.__hht in multiplayer mode (contracts/debug-api.md, multiplayer additions). */
@@ -31,7 +32,25 @@ export function installNetDebugApi(game: NetGame, ready: Promise<void>, params: 
       const pose = { x: 0, y: 0, z: 0, yaw: 0, anim: 0, carry: null, emoting: false };
       return b.sample(game.conn.clock.serverNow(), pose) ? [pose.x, pose.y, pose.z] : null;
     },
-    plots: () => Array.from(game.conn.state.plots, (p, index) => ({ index, state: p.state, completedStages: p.completedStages, filledSlots: p.filledSlots, hostName: p.hostName, joinMode: p.joinMode, crewSize: p.crewSize, bin: Array.from(p.bin) })),
+    plots: () => Array.from(game.conn.state.plots, (p, index) => ({
+      index, state: p.state, completedStages: p.completedStages, filledSlots: p.filledSlots, hostName: p.hostName, joinMode: p.joinMode, crewSize: p.crewSize, bin: Array.from(p.bin),
+      groundDug: p.groundDug, groundPoured: p.groundPoured, highFilled: p.highFilled, mixerBags: p.mixerBags, hookType: p.hookType, palletTypes: Array.from(p.palletTypes),
+      machineOps: Array.from(p.machineOps),
+    })),
+    // feature 003 (contracts/debug-api.md)
+    machines: () => game.machinePoses.map((m) => {
+      const pv = game.conn.state.plots[plotOfMachine(m.id)];
+      const op = pv ? (Array.from(pv.machineOps)[m.id % 4] ?? '') : '';
+      const load = m.id === game.seatedId && game.machinePred ? game.machinePred.state.load : null;
+      return { id: m.id, kind: kindOfMachine(m.id), plot: plotOfMachine(m.id), x: m.x, z: m.z, yaw: m.yaw, p1: m.p1, p2: m.p2, p3: m.p3, phase: m.phase, operator: op, load: load ?? { code: m.loadCode } };
+    }),
+    myMachine: () => game.seatedId,
+    cue: () => (game as unknown as NetPlay).world?.cue.current ?? { plot: -1, machine: null },
+    snapRing: () => (game as unknown as NetPlay).world?.highSlots.litSlot ?? null,
+    camera: () => (game.machineCams.active ? game.machineCams.mode : 'follow'),
+    machineLabel: () => (game as unknown as NetPlay).machineLabel?.() ?? null,
+    machineModels: () => ({ crane: game.machines.hasModel('crane'), excavator: game.machines.hasModel('excavator'), forklift: game.machines.hasModel('forklift'), mixer: game.machines.hasModel('mixer') }),
+    audio: () => ({ samples: game.sfx.hasSample('engine-diesel'), music: game.sfx.musicPlaying }),
     shift: () => {
       const s = game.conn.state.shift;
       return { epoch: s.epoch, endsAt: s.endsAt, phase: s.phase, msLeft: s.endsAt - game.conn.clock.serverNow() };
@@ -51,6 +70,8 @@ export function installNetDebugApi(game: NetGame, ready: Promise<void>, params: 
       endShiftIn: (seconds: number) => game.conn.room.send('dev', { op: 'endShiftIn', seconds }),
       unlockChat: () => game.conn.room.send('dev', { op: 'unlockChat' }),
       spawnBots: (n: number) => game.conn.room.send('dev', { op: 'spawnBots', n }),
+      fillGround: (plot: number) => game.conn.room.send('dev', { op: 'fillGround', plot }),
+      machinePose: (id: number, pose: { x?: number; z?: number; yaw?: number; p1?: number; p2?: number; p3?: number }) => game.conn.room.send('dev', { op: 'machinePose', id, pose }),
     },
   };
   const api = {

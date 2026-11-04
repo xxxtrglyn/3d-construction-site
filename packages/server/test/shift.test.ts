@@ -1,11 +1,13 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { SITE } from '@hht/shared';
+import { SITE, machineId, parkedState } from '@hht/shared';
 import type { RunningServer } from '../src/server.ts';
 import { boot, joinPlayer, sleep, until, worldOf } from './helpers.ts';
 import { helpersFor } from './world-helpers.ts';
+import { machineHelpersFor } from './machine-helpers.ts';
 
 let server: RunningServer;
 const { S, put, host, dropAt, plotState } = helpersFor(() => server);
+const { enter, steps, hold, rec, sys } = machineHelpersFor(() => server);
 afterEach(async () => {
   await server?.close();
 });
@@ -53,13 +55,39 @@ describe('shifts', () => {
     }
     await sleep(550);
     a.send('dev', { op: 'endShiftIn', seconds: 1 });
-    const d = SITE.plots[plot]!;
-    await dropAt(a, d.x, d.z, 'bell');
+    // the bell is a high slot (feature 003): the dev cheat fills it through the crane path
+    await sleep(550);
+    a.send('dev', { op: 'fillStage', plot });
     const cel = await a.waitFor('celebrate');
     const sum = await a.waitFor('summary', undefined, 8000);
     expect(Date.now()).toBeGreaterThanOrEqual(cel.until - 50);
     expect(sum.worldTowers).toBe(1);
     expect(sum.myCrewTowers).toBe(1);
+    await a.leave();
+  }, 20_000);
+
+  it('a shift reset puts operators out with shiftReset and parks every machine', async () => {
+    server = await boot({ timers: { warnS: 1, countdownS: 1 } });
+    const a = await joinPlayer(server);
+    const plot = await host(a);
+    expect(await enter(a, plot, 'forklift')).toBe('entered');
+    await steps(a, hold(30, { dz: 127 }));
+    expect(rec(plot, 'forklift').state).not.toEqual(parkedState(machineId(plot, 'forklift'), SITE.machines[plot]!));
+    await sleep(550);
+    a.send('machine', { op: 'exit' });
+    await until(() => S(a).machine === -1);
+    await sleep(550);
+    expect(await enter(a, plot, 'forklift')).toBe('entered');
+    a.send('dev', { op: 'endShiftIn', seconds: 1 });
+    expect((await a.waitFor('machineExit', (e) => e.reason === 'shiftReset', 6000)).reason).toBe('shiftReset');
+    await a.waitFor('summary', undefined, 6000);
+    for (const r of sys().machines.recs) {
+      expect(r.operator).toBe('');
+      expect(r.state).toEqual(parkedState(r.state.id, SITE.machines[Math.floor(r.state.id / 4)]!));
+    }
+    // a new building starts at Groundwork
+    const p2 = await host(a, { groundwork: true });
+    expect(plotState(p2)).toMatchObject({ groundDug: 0, groundPoured: 0 });
     await a.leave();
   }, 20_000);
 });

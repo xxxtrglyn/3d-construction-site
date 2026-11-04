@@ -21,14 +21,14 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, '..', '..'))
 sys.path.insert(0, HERE)
 
-from builders import clock_tower, foreman, fx, lot, pieces, props_mp, site, site_layout, worker  # noqa: E402
+from builders import clock_tower, foreman, fx, lot, machines, pieces, props_mp, site, site_layout, worker  # noqa: E402
 from builders.common import reset_scene  # noqa: E402
 from builders.palette import PALETTE  # noqa: E402
 
 RAW = os.path.join(ROOT, 'assets', 'build', 'raw')
 
-PIECE_IDS = ['beam', 'brick', 'panel', 'paint', 'decor', 'bell', 'cone']
-RACK_IDS = ['beam', 'brick', 'panel', 'paint', 'decor', 'bell']
+PIECE_IDS = ['beam', 'brick', 'panel', 'paint', 'decor', 'bell', 'cone', 'cement', 'concrete']
+RACK_IDS = ['beam', 'brick', 'panel', 'paint', 'decor', 'bell', 'cement']
 
 
 def asset_specs():
@@ -38,7 +38,7 @@ def asset_specs():
         dict(id='pieces', group='critical', build=pieces.build,
              groups=[f'Piece_{p}' for p in PIECE_IDS], keep=['Pieces']),
         dict(id='lot', group='critical', build=lot.build, groups=['Lot'],
-             keep=['Spawn', 'TowerPlot'] + [f'Rack_{p}_Top' for p in RACK_IDS + ['cone']]),
+             keep=['Spawn', 'TowerPlot'] + [f'Rack_{p}_Top' for p in RACK_IDS + ['cone']] + lot.MACHINE_EMPTIES),
         dict(id='site', group='critical', build=site.build, groups=['Site'], keep=['Site'], vcol='site'),
         dict(id='fx', group='deferred', build=fx.build,
              groups=['Fx_puff', 'Fx_confetti', 'Fx_sparkle', 'Fx_ray'], keep=['Fx']),
@@ -65,6 +65,12 @@ def asset_specs():
         # LOD1: everything in one vertex-colored mesh, decimated (1 draw, critical so far towers show at once)
         specs.append(dict(id=f'clock-tower-lod1-{n}', group='critical', build=(lambda n=n: clock_tower.build(n)),
                           groups=[f'ClockTower_Stage{n}'], keep=[], scale=clock_tower.TOWER_SCALE, vcol='all', decimate=2500))
+    # feature 003: the four machines (rig parts, one vertex-colored toon mesh per part) + LOD1 (one mesh, ≤ 600 tris).
+    # Deferred: they stream in after play starts, with placeholders until then (FR-038).
+    for kind, build in machines.BUILDERS.items():
+        root = machines.ROOTS[kind]
+        specs.append(dict(id=f'machine-{kind}', group='deferred', build=build, groups=machines.PARTS[kind], keep=[root], vcol='keep-special'))
+        specs.append(dict(id=f'machine-{kind}-lod1', group='deferred', build=(lambda b=build: b(lod=True)), groups=[f'{root}_LOD1'], keep=[], vcol='all', decimate=600))
     return specs
 
 

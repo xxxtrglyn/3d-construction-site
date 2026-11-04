@@ -22,6 +22,8 @@ export interface BuildingRow {
   finishedAt: number | null;
   crew: CrewMember[];
   bin: BinEntry[];
+  /** feature 003: cement bags in the plot's mixer (0..4) */
+  mixerBags: number;
 }
 
 export interface ChatReportRow {
@@ -81,7 +83,10 @@ export class WorldRepo {
           plot,
           state: r.state as BuildingRow['state'],
           blueprintId: r.blueprint_id as string,
-          progress: { blueprintId: r.blueprint_id as string, completedStages: r.completed_stages as number, filledSlots: r.filled_slots as number },
+          progress: {
+            blueprintId: r.blueprint_id as string, completedStages: r.completed_stages as number, filledSlots: r.filled_slots as number,
+            groundDug: r.ground_dug as number, groundPoured: r.ground_poured as number, highFilled: r.high_filled as number,
+          },
           hostKeyHash: (r.host_key_hash as string | null) ?? null,
           hostName: r.host_name as string,
           joinMode: r.join_mode as JoinMode,
@@ -89,6 +94,7 @@ export class WorldRepo {
           finishedAt: (r.finished_at as number | null) ?? null,
           crew,
           bin,
+          mixerBags: r.mixer_bags as number,
         };
       });
     });
@@ -98,13 +104,16 @@ export class WorldRepo {
     this.db.tx(() => {
       const s = this.db.sql;
       s.prepare(
-        `INSERT INTO building (world_id, plot_index, epoch, state, blueprint_id, completed_stages, filled_slots, host_key_hash, host_name, join_mode, empty_since, finished_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO building (world_id, plot_index, epoch, state, blueprint_id, completed_stages, filled_slots, host_key_hash, host_name, join_mode, empty_since, finished_at, updated_at,
+           ground_dug, ground_poured, high_filled, mixer_bags)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(world_id, plot_index) DO UPDATE SET epoch = excluded.epoch, state = excluded.state, blueprint_id = excluded.blueprint_id,
            completed_stages = excluded.completed_stages, filled_slots = excluded.filled_slots, host_key_hash = excluded.host_key_hash,
            host_name = excluded.host_name, join_mode = excluded.join_mode, empty_since = excluded.empty_since, finished_at = excluded.finished_at,
-           updated_at = excluded.updated_at`,
-      ).run(this.worldId, b.plot, epoch, b.state, b.blueprintId, b.progress.completedStages, b.progress.filledSlots, b.hostKeyHash, b.hostName, b.joinMode, b.emptySince, b.finishedAt, Date.now());
+           updated_at = excluded.updated_at, ground_dug = excluded.ground_dug, ground_poured = excluded.ground_poured,
+           high_filled = excluded.high_filled, mixer_bags = excluded.mixer_bags`,
+      ).run(this.worldId, b.plot, epoch, b.state, b.blueprintId, b.progress.completedStages, b.progress.filledSlots, b.hostKeyHash, b.hostName, b.joinMode, b.emptySince, b.finishedAt, Date.now(),
+        b.progress.groundDug, b.progress.groundPoured, b.progress.highFilled, b.mixerBags);
       s.prepare('DELETE FROM crew_member WHERE world_id = ? AND plot_index = ?').run(this.worldId, b.plot);
       const insC = s.prepare('INSERT OR REPLACE INTO crew_member (world_id, plot_index, key_hash, name, hat_color, role, joined_at, epoch) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
       for (const m of b.crew) insC.run(this.worldId, b.plot, m.keyHash, m.name, m.hatColor, m.role, m.joinedAt, epoch);
