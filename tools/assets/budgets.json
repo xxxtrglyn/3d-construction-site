@@ -1,0 +1,29 @@
+{
+  "$comment": "Constitution Principle III / spec FR-024. Sizes in bytes (compressed: glb as served, JS gzip). jsGzip raised 1.6->2.0 MB on 2026-11-04: rapier3d-compat inlines its WASM as base64 (~1.6 MB gzip); see research.md R10.",
+  "criticalTotal": 5000000,
+  "criticalTarget": 3000000,
+  "jsGzip": 2000000,
+  "perAsset": {
+    "worker": 150000,
+    "lot": 400000,
+    "pieces": 150000,
+    "fx": 100000,
+    "clock-tower-stage-0": 100000,
+    "clock-tower-stage-1": 600000,
+    "clock-tower-stage-2": 600000,
+    "clock-tower-stage-3": 600000,
+    "clock-tower-stage-4": 600000,
+    "clock-tower-stage-5": 600000,
+    "clock-tower-stage-6": 600000
+  },
+  "render": {
+    "high": {
+      "drawCalls": 250,
+      "triangles": 400000
+    },
+    "low": {
+      "drawCalls": 150,
+      "triangles": 200000
+    }
+  }
+}

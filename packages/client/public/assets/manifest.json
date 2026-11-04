@@ -1,0 +1,158 @@
+{
+  "version": 1,
+  "generatedAt": "2026-11-04T04:51:20.837Z",
+  "assets": [
+    {
+      "id": "worker",
+      "file": "worker.7a3d12b5.glb",
+      "bytes": 41460,
+      "sha256": "7a3d12b5ce781af4059dc20e1b8d15d4e06f10cec753bd57eddca676dfcfd298",
+      "group": "critical",
+      "nodes": [
+        "Arm_L",
+        "Arm_R",
+        "Body",
+        "Carry",
+        "Hand_R",
+        "Hat",
+        "Leg_L",
+        "Leg_R",
+        "Worker"
+      ]
+    },
+    {
+      "id": "pieces",
+      "file": "pieces.b26dc0a1.glb",
+      "bytes": 79224,
+      "sha256": "b26dc0a107df0e753295345d1944f835ec4f12c2406865c225d8a2d104df20a3",
+      "group": "critical",
+      "nodes": [
+        "Piece_beam",
+        "Piece_bell",
+        "Piece_brick",
+        "Piece_cone",
+        "Piece_decor",
+        "Piece_paint",
+        "Piece_panel",
+        "Pieces"
+      ]
+    },
+    {
+      "id": "lot",
+      "file": "lot.4a4f616d.glb",
+      "bytes": 269320,
+      "sha256": "4a4f616d4884c151203bf2e09860b2104932369ff285468802cb7aab30e70b47",
+      "group": "critical",
+      "nodes": [
+        "Lot",
+        "Rack_beam_Top",
+        "Rack_bell_Top",
+        "Rack_brick_Top",
+        "Rack_cone_Top",
+        "Rack_decor_Top",
+        "Rack_paint_Top",
+        "Rack_panel_Top",
+        "Spawn",
+        "TowerPlot"
+      ]
+    },
+    {
+      "id": "fx",
+      "file": "fx.e5a9889a.glb",
+      "bytes": 9048,
+      "sha256": "e5a9889ab45967982088d417cfcdb2473671a5c30533f4da9125aef013d41e78",
+      "group": "deferred",
+      "nodes": [
+        "Fx",
+        "Fx_confetti",
+        "Fx_puff",
+        "Fx_ray",
+        "Fx_sparkle"
+      ]
+    },
+    {
+      "id": "clock-tower-stage-0",
+      "file": "clock-tower-stage-0.503944c4.glb",
+      "bytes": 11704,
+      "sha256": "503944c4bf9db3fdac3438de5286a2c6b4121d5a49c6b413046279859f61aa2a",
+      "group": "critical",
+      "nodes": [
+        "BuildZone",
+        "ClockTower_Stage0",
+        "Sign_Stars"
+      ]
+    },
+    {
+      "id": "clock-tower-stage-1",
+      "file": "clock-tower-stage-1.50dee7f5.glb",
+      "bytes": 17380,
+      "sha256": "50dee7f54941dedc984661ee14f1a889e40fdcbe14109a3603a751724ac165fa",
+      "group": "critical",
+      "nodes": [
+        "BuildZone",
+        "ClockTower_Stage1",
+        "Sign_Stars"
+      ]
+    },
+    {
+      "id": "clock-tower-stage-2",
+      "file": "clock-tower-stage-2.8dfd1552.glb",
+      "bytes": 34348,
+      "sha256": "8dfd15526080086f39e8adc963a7f7a324a9f04e730fa171f0cf9b3149367cce",
+      "group": "deferred",
+      "nodes": [
+        "BuildZone",
+        "ClockTower_Stage2",
+        "Sign_Stars"
+      ]
+    },
+    {
+      "id": "clock-tower-stage-3",
+      "file": "clock-tower-stage-3.28ff94ca.glb",
+      "bytes": 96112,
+      "sha256": "28ff94caacaf84a0d629e421dc82ef824872be60cb13955fcd946938c3a6055b",
+      "group": "deferred",
+      "nodes": [
+        "BuildZone",
+        "ClockTower_Stage3",
+        "Sign_Stars"
+      ]
+    },
+    {
+      "id": "clock-tower-stage-4",
+      "file": "clock-tower-stage-4.cf3e6f02.glb",
+      "bytes": 131504,
+      "sha256": "cf3e6f02593311a39856a5e3dd2fa606301e5c65d8c992afe0d2e20f4c3b39b6",
+      "group": "deferred",
+      "nodes": [
+        "BuildZone",
+        "ClockTower_Stage4",
+        "Sign_Stars"
+      ]
+    },
+    {
+      "id": "clock-tower-stage-5",
+      "file": "clock-tower-stage-5.f2bf2c81.glb",
+      "bytes": 296780,
+      "sha256": "f2bf2c815c004b8d42fa604e9b982f1bb5286e26bceb9910b9137f372f1b4955",
+      "group": "deferred",
+      "nodes": [
+        "BuildZone",
+        "ClockTower_Stage5",
+        "Sign_Stars"
+      ]
+    },
+    {
+      "id": "clock-tower-stage-6",
+      "file": "clock-tower-stage-6.887c3638.glb",
+      "bytes": 471324,
+      "sha256": "887c3638187d580ca73ef34b8b34850d8374bf23340f35869ac8be4dad442fc5",
+      "group": "deferred",
+      "nodes": [
+        "BuildZone",
+        "ClockTower_Stage6",
+        "Sign_Stars"
+      ]
+    }
+  ]
+}
