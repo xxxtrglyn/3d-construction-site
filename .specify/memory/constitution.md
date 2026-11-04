@@ -1,21 +1,18 @@
 <!--
 Sync Impact Report
-- Version change: template (unversioned) → 1.0.0 (initial ratification)
-- Principles defined (template placeholders → named principles):
-  - [PRINCIPLE_1] → I. Instant Play
-  - [PRINCIPLE_2] → II. Server Authority
-  - [PRINCIPLE_3] → III. Performance Budgets Are Requirements
-  - [PRINCIPLE_4] → IV. Art Fidelity & Original IP
-  - [PRINCIPLE_5] → V. Simple & Kind Sandbox
-  - added → VI. Test & Measure
-  - added → VII. Simplicity (YAGNI)
-- Added sections: Technology Constraints; Development Workflow
-- Removed sections: none
-- Templates reviewed (read at runtime, not modified by this command):
-  - .specify/templates/plan-template.md — its "Constitution Check" gate covers principles I–VII ✅
-  - .specify/templates/spec-template.md — no change needed ✅
-  - .specify/templates/tasks-template.md — no change needed; testing/perf tasks come from VI ✅
-- Deferred TODOs: none
+- Version change: 1.0.0 → 1.1.0 (MINOR: materially expanded guidance in Principle V)
+- Modified principles:
+  - V. Simple & Kind Sandbox: "Text chat is not allowed until moderation exists" → text chat is
+    allowed only together with a defined chat moderation baseline (filter, limits, scoped channels,
+    mute/hide, report + auto-mute); player names stay generated (chat is the only free-text input)
+- Reason: owner request (2026-11-04) to add chat in feature 002-multiplayer-core; the original
+  clause already anticipated chat once moderation exists, and this amendment defines that bar.
+- Added/removed sections: none
+- Templates reviewed: plan/spec/tasks templates need no change ✅
+- Follow-up: CLAUDE.md rule of thumb "no free-text input" updated to match; spec/plan of
+  002-multiplayer-core updated.
+- Previous report (1.0.0): initial ratification from template; principles I–VII, Technology
+  Constraints and Development Workflow added.
 -->
 
 # Hard Hat Town Constitution
@@ -90,7 +87,16 @@ pipeline keeps it consistent as the asset count grows.
 - Building is additive-only: no player can delete, move or damage another player's build.
 - Anti-griefing MUST be designed in, not bolted on: a safe spawn zone where nothing can be built,
   per-player rate limits, Host approval (Open / Ask / Solo) for tower crews, and local mute/hide.
-- Text chat is not allowed until moderation exists; communication uses emotes and preset messages.
+- Text chat is allowed only together with the **chat moderation baseline**, which MUST ship in the
+  same feature as the chat:
+  - a server-side filter (blocked words masked; links, emails and phone numbers rejected);
+  - a length limit of ≤ 80 characters, plus per-player rate and duplicate limits;
+  - scoped channels only (nearby players and own crew), with no world-wide broadcast;
+  - local mute/hide and a "hide all chat" option;
+  - a report flow stored for owner review, with automatic chat-muting after reports from several
+    different players.
+- Player names stay generated from word lists; chat is the only free-text input.
+  Emotes and preset messages remain available to everyone.
 
 *Rationale:* 100 anonymous strangers only stay fun when the rules make kindness the easy default.
 
@@ -161,4 +167,4 @@ current milestone.
 - Runtime development guidance for agents lives in `CLAUDE.md` (to be created with the first
   feature plan).
 
-**Version**: 1.0.0 | **Ratified**: 2026-11-04 | **Last Amended**: 2026-11-04
+**Version**: 1.1.0 | **Ratified**: 2026-11-04 | **Last Amended**: 2026-11-04

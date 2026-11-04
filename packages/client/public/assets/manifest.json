@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-11-04T04:51:20.837Z",
+  "generatedAt": "2026-11-04T07:15:42.388Z",
   "assets": [
     {
       "id": "worker",
@@ -54,6 +54,16 @@
         "Rack_panel_Top",
         "Spawn",
         "TowerPlot"
+      ]
+    },
+    {
+      "id": "site",
+      "file": "site.0a231bb5.glb",
+      "bytes": 309080,
+      "sha256": "0a231bb5d48355b544548370a8aece8dd5242dbc9db58104bfcb328a1ee8efc7",
+      "group": "critical",
+      "nodes": [
+        "Site"
       ]
     },
     {
@@ -152,6 +162,163 @@
         "BuildZone",
         "ClockTower_Stage6",
         "Sign_Stars"
+      ]
+    },
+    {
+      "id": "foreman",
+      "file": "foreman.71164b62.glb",
+      "bytes": 62088,
+      "sha256": "71164b62a38708f1e5d661ff5eb7a70ddbd3999d24772902971870fc19e73be9",
+      "group": "critical",
+      "nodes": [
+        "Arm_L",
+        "Arm_R",
+        "Body",
+        "Foreman",
+        "Head",
+        "Leg_L",
+        "Leg_R"
+      ]
+    },
+    {
+      "id": "props-mp",
+      "file": "props-mp.4915b3c3.glb",
+      "bytes": 40252,
+      "sha256": "4915b3c38e46a963c62bfc9faede581b4e16204031bf66e01f5db6968e9b4635",
+      "group": "critical",
+      "nodes": [
+        "PlotSign",
+        "PlotSign_Face",
+        "PlotSign_Flag",
+        "PropsMP",
+        "SupplyBin",
+        "SupplyBin_Top"
+      ]
+    },
+    {
+      "id": "clock-tower-stage-1-merged",
+      "file": "clock-tower-stage-1-merged.b218f656.glb",
+      "bytes": 13320,
+      "sha256": "b218f656a14d81f44642ecca518acedd13847cfba29e05158aa43c1df8bab916",
+      "group": "deferred",
+      "nodes": [
+        "ClockTower_Stage1",
+        "Sign_Stars"
+      ]
+    },
+    {
+      "id": "clock-tower-lod1-1",
+      "file": "clock-tower-lod1-1.a6b2b986.glb",
+      "bytes": 13236,
+      "sha256": "a6b2b986da19794e23ff7770c2f17a3e0341292915c8c7e13a3fabaef7082e9f",
+      "group": "critical",
+      "nodes": [
+        "ClockTower_Stage1"
+      ]
+    },
+    {
+      "id": "clock-tower-stage-2-merged",
+      "file": "clock-tower-stage-2-merged.0c901ae3.glb",
+      "bytes": 27132,
+      "sha256": "0c901ae3c7e551b7b85d47858084f1bba117cfdcfbf344babfed7ac82d48783f",
+      "group": "deferred",
+      "nodes": [
+        "ClockTower_Stage2",
+        "Sign_Stars"
+      ]
+    },
+    {
+      "id": "clock-tower-lod1-2",
+      "file": "clock-tower-lod1-2.bd1e2100.glb",
+      "bytes": 25616,
+      "sha256": "bd1e2100fd147f0d5901b7e7366ebdbe539f0852e886ae8369db4e3d05ec9e3f",
+      "group": "critical",
+      "nodes": [
+        "ClockTower_Stage2"
+      ]
+    },
+    {
+      "id": "clock-tower-stage-3-merged",
+      "file": "clock-tower-stage-3-merged.46bf2106.glb",
+      "bytes": 82128,
+      "sha256": "46bf2106ea706571223f3a05e2ca534047191f6e3fee6b44bb7b214b37af34b5",
+      "group": "deferred",
+      "nodes": [
+        "ClockTower_Stage3",
+        "Sign_Stars"
+      ]
+    },
+    {
+      "id": "clock-tower-lod1-3",
+      "file": "clock-tower-lod1-3.7f831cc1.glb",
+      "bytes": 23984,
+      "sha256": "7f831cc107a622dc5dcfd99cd3b613beb46ebd92d7eed74b2a68376ec4789f0b",
+      "group": "critical",
+      "nodes": [
+        "ClockTower_Stage3"
+      ]
+    },
+    {
+      "id": "clock-tower-stage-4-merged",
+      "file": "clock-tower-stage-4-merged.3c6b62a5.glb",
+      "bytes": 117556,
+      "sha256": "3c6b62a527b2cde6104343b19c33b72ccdf34de5fbcb0aa3bbb85b56de0a802b",
+      "group": "deferred",
+      "nodes": [
+        "ClockTower_Stage4",
+        "Sign_Stars"
+      ]
+    },
+    {
+      "id": "clock-tower-lod1-4",
+      "file": "clock-tower-lod1-4.ad3b21e8.glb",
+      "bytes": 26860,
+      "sha256": "ad3b21e82b8af5868c984cabe8e447d00b4e6f7dc08d28104a1f755872d6ad92",
+      "group": "critical",
+      "nodes": [
+        "ClockTower_Stage4"
+      ]
+    },
+    {
+      "id": "clock-tower-stage-5-merged",
+      "file": "clock-tower-stage-5-merged.0b42b63c.glb",
+      "bytes": 276068,
+      "sha256": "0b42b63ceeb916295229190bff572c340fad67b32c7adbccf5f22d2f7d3e4450",
+      "group": "deferred",
+      "nodes": [
+        "ClockTower_Stage5",
+        "Sign_Stars"
+      ]
+    },
+    {
+      "id": "clock-tower-lod1-5",
+      "file": "clock-tower-lod1-5.04a84383.glb",
+      "bytes": 39072,
+      "sha256": "04a84383964595bdabceb3b876e71163e93e08a3cf6adabfcf4f50009ef16d55",
+      "group": "critical",
+      "nodes": [
+        "ClockTower_Stage5"
+      ]
+    },
+    {
+      "id": "clock-tower-stage-6-merged",
+      "file": "clock-tower-stage-6-merged.a7999642.glb",
+      "bytes": 453048,
+      "sha256": "a7999642aa15970382f56dd82946abd1f29fa52e7ba011782f2bdffe29020491",
+      "group": "deferred",
+      "nodes": [
+        "ClockTower_Stage6",
+        "Sign_Stars"
+      ]
+    },
+    {
+      "id": "clock-tower-lod1-6",
+      "file": "clock-tower-lod1-6.8c19e795.glb",
+      "bytes": 30748,
+      "sha256": "8c19e795da34f12817814d0ec35d4d3fc0d47e57a5ce3fb29aaed32f169abf60",
+      "group": "critical",
+      "nodes": [
+        "ClockTower_Stage6"
       ]
     }
   ]

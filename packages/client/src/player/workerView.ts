@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import type { CarryPose } from '@hht/shared';
 import { toonFromColor } from '../render/toonMaterial.ts';
+import { animate, newAnimState, type CrowdPose, type PartPose } from '../crowd/animation.ts';
 
-export type WorkerPose = 'idle' | 'walk' | 'run' | 'air' | 'cheer';
+export type WorkerPose = CrowdPose;
 
 /**
  * The approved chibi worker with procedural animation on its node hierarchy
@@ -17,10 +18,8 @@ export class WorkerView {
   private readonly legL: THREE.Object3D;
   private readonly legR: THREE.Object3D;
   readonly carryAnchor: THREE.Object3D;
-  private phase = 0;
-  private t = 0;
-  private squash = 0;
-  private flick = 0;
+  private readonly anim = newAnimState();
+  private readonly pose: PartPose = { legL: 0, legR: 0, armL: [0, 0], armR: [0, 0], bob: 0, twist: 0, squash: 0 };
   private readonly bodyBaseY: number;
   private readonly hatBaseY: number;
 
@@ -56,52 +55,23 @@ export class WorkerView {
   }
 
   jumped(): void {
-    this.squash = 1;
+    this.anim.squash = 1;
   }
 
   tossed(): void {
-    this.flick = 1;
+    this.anim.flick = 1;
   }
 
+  /** Same procedural animation as the crowd (crowd/animation.ts), incl. emotes. */
   update(dt: number, pose: WorkerPose, speed: number, carry: CarryPose | null): void {
-    this.t += dt;
-    const moving = pose === 'walk' || pose === 'run';
-    this.phase += dt * (moving ? 3.2 + speed * 1.6 : 0);
-    const swing = moving ? Math.sin(this.phase) * (pose === 'run' ? 0.75 : 0.5) : 0;
-    const bob = moving ? Math.abs(Math.sin(this.phase)) * 0.05 : Math.sin(this.t * 2.2) * 0.012;
-    this.squash = Math.max(0, this.squash - dt * 4);
-    this.flick = Math.max(0, this.flick - dt * 5);
-
-    this.legL.rotation.x = pose === 'air' ? -0.5 : swing;
-    this.legR.rotation.x = pose === 'air' ? 0.3 : -swing;
-    this.body.position.y = this.bodyBaseY + bob;
-    this.hat.position.y = this.hatBaseY + bob;
-    const sq = Math.sin(this.squash * Math.PI) * 0.12;
-    this.root.scale.set(1 + sq * 0.6, 1 - sq, 1 + sq * 0.6);
-
-    // arms: positive x rotation swings the hand forward (+Z) for a +Z-facing worker
-    let al = -swing * 0.8;
-    let ar = swing * 0.8;
-    let zl = 0;
-    let zr = 0;
-    if (carry === 'twoHands' || carry === 'hug') {
-      al = ar = -1.35;
-      zl = carry === 'hug' ? 0.35 : 0.15;
-      zr = -zl;
-    } else if (carry === 'shoulder') {
-      ar = -2.6;
-      al = -swing * 0.5;
-    }
-    if (pose === 'cheer') {
-      const w = Math.sin(this.t * 10) * 0.25;
-      al = -2.9 + w;
-      ar = -2.9 - w;
-      zl = 0.25;
-      zr = -0.25;
-      this.root.position.y += Math.abs(Math.sin(this.t * 6)) * 0.0;
-    }
-    if (this.flick > 0) ar = -2.2 * this.flick;
-    this.armL.rotation.set(al, 0, zl);
-    this.armR.rotation.set(ar, 0, zr);
+    const p = animate(this.anim, dt, pose, speed, carry, this.pose);
+    this.legL.rotation.x = p.legL;
+    this.legR.rotation.x = p.legR;
+    this.body.position.y = this.bodyBaseY + p.bob;
+    this.hat.position.y = this.hatBaseY + p.bob;
+    this.body.rotation.y = p.twist;
+    this.root.scale.set(1 + p.squash * 0.6, 1 - p.squash, 1 + p.squash * 0.6);
+    this.armL.rotation.set(p.armL[0], 0, p.armL[1]);
+    this.armR.rotation.set(p.armR[0], 0, p.armR[1]);
   }
 }

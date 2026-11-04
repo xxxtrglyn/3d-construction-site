@@ -10,13 +10,16 @@ export interface HhtState {
 type Win = Window & { __hht?: { ready: Promise<void>; state(): HhtState; render(): Record<string, number>; debug: Record<string, (...a: unknown[]) => unknown>; events: EventTarget } };
 
 /** Open the game with the e2e debug API and wait until the worker is playable. */
-export async function openGame(page: Page, query = 'e2e=1'): Promise<string[]> {
+/** 001 single-player specs run under ?solo=1 (feature 002 keeps solo mode). */
+export async function openGame(page: Page, query = 'e2e=1&solo=1'): Promise<string[]> {
   const errors: string[] = [];
   page.on('pageerror', (e) => errors.push(String(e)));
   page.on('console', (m) => {
     if (m.type() === 'error' && !/favicon|404/.test(m.text())) errors.push(m.text());
   });
   await page.goto(`/?${query}`);
+  // a freshly created page can start in the background (rAF throttled): make it the active tab
+  await page.bringToFront();
   await page.waitForFunction(() => !!(window as Win).__hht, null, { timeout: 45_000 });
   await page.evaluate(() => (window as Win).__hht!.ready);
   await expect(page.locator('#loader')).toHaveCount(0, { timeout: 10_000 });

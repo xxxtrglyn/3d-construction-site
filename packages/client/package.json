@@ -14,6 +14,7 @@
     "e2e:webkit": "playwright test --grep-invert @perf --project=webkit"
   },
   "dependencies": {
+    "@colyseus/sdk": "0.18.9",
     "@dimforge/rapier3d-compat": "0.21.0",
     "@hht/shared": "workspace:*",
     "three": "0.187.0"

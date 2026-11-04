@@ -1,5 +1,5 @@
 {
-  "$comment": "Constitution Principle III / spec FR-024. Sizes in bytes (compressed: glb as served, JS gzip). jsGzip raised 1.6->2.0 MB on 2026-11-04: rapier3d-compat inlines its WASM as base64 (~1.6 MB gzip); see research.md R10.",
+  "$comment": "Constitution Principle III / spec FR-024. Sizes in bytes (compressed: glb as served, JS gzip). jsGzip raised 1.6->2.0 MB on 2026-11-04: rapier3d-compat inlines its WASM as base64 (~1.6 MB gzip); see research.md R10. 2026-11-04 (002): perAsset for site/foreman/props-mp/tower LODs, render.crowd, net (load test) and modes (which critical assets each boot mode excludes; multiplayer excludes the Rapier chunk).",
   "criticalTotal": 5000000,
   "criticalTarget": 3000000,
   "jsGzip": 2000000,
@@ -14,7 +14,22 @@
     "clock-tower-stage-3": 600000,
     "clock-tower-stage-4": 600000,
     "clock-tower-stage-5": 600000,
-    "clock-tower-stage-6": 600000
+    "clock-tower-stage-6": 600000,
+    "site": 500000,
+    "foreman": 150000,
+    "props-mp": 120000,
+    "clock-tower-lod1-1": 40000,
+    "clock-tower-stage-1-merged": 600000,
+    "clock-tower-lod1-2": 40000,
+    "clock-tower-stage-2-merged": 600000,
+    "clock-tower-lod1-3": 40000,
+    "clock-tower-stage-3-merged": 600000,
+    "clock-tower-lod1-4": 40000,
+    "clock-tower-stage-4-merged": 600000,
+    "clock-tower-lod1-5": 40000,
+    "clock-tower-stage-5-merged": 600000,
+    "clock-tower-lod1-6": 40000,
+    "clock-tower-stage-6-merged": 600000
   },
   "render": {
     "high": {
@@ -24,6 +39,52 @@
     "low": {
       "drawCalls": 150,
       "triangles": 200000
+    },
+    "crowd": {
+      "high": {
+        "drawCalls": 300,
+        "triangles": 600000
+      },
+      "low": {
+        "drawCalls": 200,
+        "triangles": 300000
+      }
+    }
+  },
+  "net": {
+    "ticksPerSMin": 19.5,
+    "tickMsAvg": 10,
+    "tickMsP99": 25,
+    "bytesInPerSAvg": 30000,
+    "heapMbPeak": 256,
+    "heapSlopeMbPerMin": 0.5
+  },
+  "modes": {
+    "solo": {
+      "excludeAssets": [
+        "site",
+        "foreman",
+        "props-mp",
+        "clock-tower-lod1-1",
+        "clock-tower-lod1-2",
+        "clock-tower-lod1-3",
+        "clock-tower-lod1-4",
+        "clock-tower-lod1-5",
+        "clock-tower-lod1-6"
+      ],
+      "excludeChunks": [
+        "^NetGame-",
+        "^connection-",
+        "^netDebugApi-"
+      ]
+    },
+    "net": {
+      "excludeAssets": [
+        "lot"
+      ],
+      "excludeChunks": [
+        "^Game-"
+      ]
     }
   }
 }

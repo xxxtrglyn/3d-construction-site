@@ -14,6 +14,7 @@ import { FollowCamera } from '../player/followCamera.ts';
 import { WorkerView } from '../player/workerView.ts';
 import type { ProfileStore } from '../profile/guestProfile.ts';
 import { Bloom } from '../render/bloom.ts';
+import { GameShell } from './GameShell.ts';
 import { ghostMaterial } from '../render/ghost.ts';
 import { configureOutlines, setOutlinesVisible } from '../render/outline.ts';
 import type { QualitySettings } from '../render/quality.ts';
@@ -31,7 +32,7 @@ export type GameEvent = 'snapped' | 'stageComplete' | 'masterpiece' | 'wrongPiec
 
 const v3 = (): THREE.Vector3 => new THREE.Vector3();
 
-export class Game {
+export class Game extends GameShell {
   readonly events = new EventTarget();
   readonly actions = new Actions();
   readonly sfx = new Sfx();
@@ -49,34 +50,27 @@ export class Game {
   celebration!: Celebration;
   hud!: Hud;
   touch: TouchControls | null = null;
-  private bloom: Bloom | null = null;
   private towerCollider: RAPIER.Collider | null = null;
   private target: Target | null = null;
   private readonly targetRing: THREE.Mesh;
-  private running = false;
-  private raf = 0;
-  private last = 0;
   private cheerTimer = 0;
   private respawnHeld = 0;
   private armDrop = false;
-  private readonly frameTimes: number[] = [];
-  private fpsTimer = 0;
-  showFps = false;
-  /** debug: freeze gameplay updates except rendering (perf scene) */
-  frozen = false;
   private readonly tmpM = new THREE.Matrix4();
   private readonly tmpQ = new THREE.Quaternion();
   private readonly tmpV = new THREE.Vector3();
   private readonly fwd = v3();
   private readonly right = v3();
 
-  constructor(
-    readonly ctx: RenderContext,
-    readonly assets: AssetStore,
-    readonly profile: ProfileStore,
-    private quality: QualitySettings,
-    private readonly hudRoot: HTMLElement,
-  ) {
+  readonly assets: AssetStore;
+  readonly profile: ProfileStore;
+  private readonly hudRoot: HTMLElement;
+
+  constructor(ctx: RenderContext, assets: AssetStore, profile: ProfileStore, quality: QualitySettings, hudRoot: HTMLElement) {
+    super(ctx, quality);
+    this.assets = assets;
+    this.profile = profile;
+    this.hudRoot = hudRoot;
     const ring = new THREE.TorusGeometry(0.42, 0.035, 6, 32);
     ring.rotateX(Math.PI / 2);
     this.targetRing = new THREE.Mesh(ring, new THREE.MeshBasicMaterial({ color: new THREE.Color(1.6, 1.6, 1.6), toneMapped: false }));
@@ -197,12 +191,7 @@ export class Game {
   }
 
   private onResize(): void {
-    this.ctx.resize();
-    if (this.bloom) {
-      const r = this.ctx.renderer;
-      const s = r.getSize(new THREE.Vector2());
-      this.bloom.setSize(s.x, s.y, r.getPixelRatio());
-    }
+    this.resizeRenderer();
   }
 
   /** low tier: scenery stops casting shadows (saves ~25k shadow-pass triangles) */
@@ -376,39 +365,22 @@ export class Game {
   }
 
   // ---------------------------------------------------------------- loop
-  start(): void {
-    if (this.running) return;
-    this.running = true;
-    this.last = performance.now();
-    const tick = (now: number): void => {
-      if (!this.running) return;
-      this.raf = requestAnimationFrame(tick);
-      const dt = Math.min(0.05, (now - this.last) / 1000);
-      this.last = now;
-      this.frame(dt, now);
-    };
-    this.raf = requestAnimationFrame(tick);
-  }
-
-  pause(): void {
-    this.running = false;
-    cancelAnimationFrame(this.raf);
+  override pause(): void {
+    super.pause();
     this.actions.releaseAll();
   }
 
-  resume(): void {
-    if (!this.running) this.start();
+  protected step(dt: number, now: number): void {
+    this.update(dt, now);
   }
 
-  private frame(dt: number, now: number): void {
-    const t0 = performance.now();
-    if (!this.frozen) this.update(dt, now);
-    else {
-      this.celebration.update(dt);
-      ghostMaterial.uniforms.uTime!.value += dt;
-    }
-    this.render(dt);
-    this.recordFrame(dt, performance.now() - t0);
+  protected override frozenStep(dt: number): void {
+    this.celebration.update(dt);
+    ghostMaterial.uniforms.uTime!.value += dt;
+  }
+
+  protected override onFps(text: string): void {
+    this.hud.setFps(text);
   }
 
   private update(dt: number, now: number): void {
@@ -542,32 +514,5 @@ export class Game {
       s.setScalar(1);
     }
     r.end();
-  }
-
-  private render(dt: number): void {
-    const { renderer, scene, camera } = this.ctx;
-    renderer.info.reset();
-    if (this.bloom) this.bloom.render(dt);
-    else renderer.render(scene, camera);
-  }
-
-  private recordFrame(dt: number, _cpuMs: number): void {
-    this.frameTimes.push(dt * 1000);
-    if (this.frameTimes.length > 300) this.frameTimes.shift();
-    if (this.showFps) {
-      this.fpsTimer += dt;
-      if (this.fpsTimer > 0.5) {
-        this.fpsTimer = 0;
-        const i = this.ctx.renderer.info;
-        const med = this.medianFrameMs();
-        this.hud.setFps(`${(1000 / med).toFixed(0)} fps (${med.toFixed(1)} ms)\ncalls ${i.render.calls}  tris ${(i.render.triangles / 1000).toFixed(0)}k`);
-      }
-    }
-  }
-
-  medianFrameMs(): number {
-    if (!this.frameTimes.length) return 0;
-    const s = [...this.frameTimes].sort((x, y) => x - y);
-    return s[Math.floor(s.length / 2)] as number;
   }
 }

@@ -16,3 +16,6 @@ __pycache__/
 *.pyc
 *.blend1
 .claude/settings.local.json
+data/
+reports/
+packages/server/data/*.sqlite*

@@ -7,6 +7,7 @@ import { applyShot } from './shots.ts';
 
 /** window.__hht — contracts/debug-api.md */
 export interface HhtDebugApi {
+  mode: 'solo';
   ready: Promise<void>;
   state(): {
     worker: { position: [number, number, number]; grounded: boolean; holding: PieceTypeId | null };
@@ -34,6 +35,7 @@ export function installDebugApi(game: Game, ready: Promise<void>, params: URLSea
     if (!PIECE_TYPE_IDS.includes(t)) throw new Error(`unknown piece type ${t}`);
   };
   const api: HhtDebugApi = {
+    mode: 'solo',
     ready,
     state: () => {
       const p = game.controller.position;

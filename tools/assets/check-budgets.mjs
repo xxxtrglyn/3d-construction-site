@@ -34,38 +34,48 @@ for (const a of manifest.assets ?? []) {
 }
 for (const e of schemaErrors) failures.push(`manifest: ${e}`);
 
-// --- per-asset + critical total ---
-let critical = 0;
+// --- per-asset budgets ---
+const criticalAssets = [];
 for (const a of manifest.assets ?? []) {
   const limit = budgets.perAsset[a.id];
   const ok = limit === undefined ? false : a.bytes <= limit;
   if (limit === undefined) failures.push(`asset ${a.id}: no budget defined in tools/assets/budgets.json`);
   else if (!ok) failures.push(`asset ${a.id}: ${kb(a.bytes)} exceeds budget ${kb(limit)}`);
-  if (a.group === 'critical') critical += a.bytes;
+  if (a.group === 'critical') criticalAssets.push(a);
   rows.push([a.id, a.group, kb(a.bytes), limit ? kb(limit) : '—', ok ? 'ok' : 'FAIL']);
 }
 
-// --- JS bundle (gzip) from the production build ---
-let js = 0;
+// --- JS bundle (gzip) from the production build, per chunk ---
+const chunks = [];
 if (existsSync(dist)) {
   const walk = (d) => readdirSync(d, { withFileTypes: true }).flatMap((e) => (e.isDirectory() ? walk(join(d, e.name)) : [join(d, e.name)]));
   const files = walk(dist).filter((f) => /\.(js|css|html|wasm)$/.test(f) && !/debug/i.test(f));
-  for (const f of files) js += gzipSync(readFileSync(f), { level: 9 }).byteLength;
+  for (const f of files) chunks.push({ file: f, gz: gzipSync(readFileSync(f), { level: 9 }).byteLength });
+  const js = chunks.reduce((s, c) => s + c.gz, 0);
   const ok = js <= budgets.jsGzip;
   if (!ok) failures.push(`JS/CSS/HTML bundle: ${kb(js)} gzip exceeds budget ${kb(budgets.jsGzip)}`);
-  rows.push(['(code bundle)', 'critical', kb(js), kb(budgets.jsGzip), ok ? 'ok' : 'FAIL']);
-  critical += js;
+  rows.push(['(code bundle, all)', 'critical', kb(js), kb(budgets.jsGzip), ok ? 'ok' : 'FAIL']);
 } else {
   console.warn('[budgets] packages/client/dist not found — run `pnpm build` first to include the JS bundle');
 }
-const okTotal = critical <= budgets.criticalTotal;
-if (!okTotal) failures.push(`critical payload ${kb(critical)} exceeds ${kb(budgets.criticalTotal)}`);
-rows.push(['CRITICAL TOTAL', '', kb(critical), kb(budgets.criticalTotal), okTotal ? 'ok' : 'FAIL']);
 
-const w = [22, 9, 9, 9, 5];
+// --- critical payload per boot mode (solo = 001 lot + Rapier; net = site + foreman + LODs, no Rapier) ---
+const modes = budgets.modes ?? { solo: { excludeAssets: [], excludeChunks: [] } };
+for (const [mode, cfg] of Object.entries(modes)) {
+  const assetBytes = criticalAssets.filter((a) => !cfg.excludeAssets.includes(a.id)).reduce((s, a) => s + a.bytes, 0);
+  const codeBytes = chunks
+    .filter((c) => !cfg.excludeChunks.some((re) => new RegExp(re).test(c.file.split('/').pop())))
+    .reduce((s, c) => s + c.gz, 0);
+  const total = assetBytes + codeBytes;
+  const okTotal = total <= budgets.criticalTotal;
+  if (!okTotal) failures.push(`critical payload (${mode}) ${kb(total)} exceeds ${kb(budgets.criticalTotal)}`);
+  if (total > budgets.criticalTarget) console.warn(`[budgets] note: ${mode} critical payload above the ${kb(budgets.criticalTarget)} target`);
+  rows.push([`CRITICAL (${mode})`, '', kb(total), kb(budgets.criticalTotal), okTotal ? 'ok' : 'FAIL']);
+}
+
+const w = [26, 9, 9, 9, 5];
 console.log(['asset', 'group', 'size', 'budget', ''].map((c, i) => c.padEnd(w[i])).join(' '));
 for (const r of rows) console.log(r.map((c, i) => String(c).padEnd(w[i])).join(' '));
-if (critical > budgets.criticalTarget) console.warn(`[budgets] note: critical payload above the ${kb(budgets.criticalTarget)} target`);
 if (failures.length) {
   console.error('\n[budgets] FAILED:\n  - ' + failures.join('\n  - '));
   process.exit(1);

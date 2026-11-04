@@ -3,9 +3,11 @@
   "private": true,
   "type": "module",
   "packageManager": "pnpm@10.33.4",
-  "engines": { "node": ">=20.19" },
+  "engines": {
+    "node": ">=24.11"
+  },
   "scripts": {
-    "dev": "pnpm --filter @hht/client dev",
+    "dev": "pnpm -r --parallel --filter @hht/server --filter @hht/client dev",
     "build": "pnpm --filter @hht/client build",
     "preview": "pnpm --filter @hht/client preview",
     "assets": "node tools/assets/run-pipeline.mjs",
@@ -15,7 +17,9 @@
     "e2e": "pnpm --filter @hht/client e2e",
     "perf": "pnpm --filter @hht/client perf",
     "check:budgets": "node tools/assets/check-budgets.mjs",
-    "verify": "pnpm typecheck && pnpm test && pnpm build && pnpm check:budgets && pnpm e2e && pnpm perf"
+    "verify": "pnpm typecheck && pnpm test && pnpm build && pnpm check:budgets && pnpm e2e && pnpm perf && pnpm loadtest --duration 60",
+    "loadtest": "pnpm --filter @hht/server loadtest",
+    "reports": "pnpm --filter @hht/server reports"
   },
   "devDependencies": {
     "@gltf-transform/core": "4.5.1",
@@ -23,5 +27,10 @@
     "@gltf-transform/functions": "4.5.1",
     "meshoptimizer": "1.3.0",
     "typescript": "7.0.2"
+  },
+  "pnpm": {
+    "overrides": {
+      "@colyseus/core": "0.18.23"
+    }
   }
 }

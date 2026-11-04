@@ -4,8 +4,9 @@ A browser-based 3D chibi construction-site sandbox: about 100 players per world 
 and players join from a link.
 
 - **Constitution (binding)**: `.specify/memory/constitution.md`
-- **Active feature**: `specs/001-single-player-prototype/` (spec, plan, research, data model,
-  contracts, tasks)
+- **Active feature**: `specs/002-multiplayer-core/` (multiplayer world with Host crews: spec, plan,
+  research, data model, contracts). Feature 001 (`specs/001-single-player-prototype/`) is done and
+  stays available as solo mode (`?solo=1`).
 - **Approved art references**: `assets/renders/` (toon look); source scenes are in
   `assets/blender/`
 
@@ -14,27 +15,47 @@ and players join from a link.
 pnpm monorepo:
 
 - `packages/shared`: pure rules and types, no DOM or Three.js
-- `packages/client`: Vite + TypeScript strict + Three.js + Rapier compat
-- `packages/server`: placeholder
+- `packages/client`: Vite + TypeScript strict + Three.js (Rapier compat is loaded only by solo mode)
+- `packages/server`: authoritative Colyseus 0.18 server (`@colyseus/core`), Node 24 running
+  TypeScript directly (type stripping, `erasableSyntaxOnly`, no build step), SQLite via `node:sqlite`
+
+Use Node 24 (`nvm use`; `.nvmrc`). Node 20 is end-of-life and Colyseus 0.18 needs Node ≥ 22.
 
 Assets: headless Blender (`tools/blender/export_assets.py`) → gltf-transform (`tools/assets/`).
 
 ## Commands
 
-`pnpm dev` · `pnpm assets` · `pnpm test` · `pnpm e2e` · `pnpm perf` · `pnpm check:budgets` ·
-`pnpm verify`
+`pnpm dev` (server :2567 + Vite, proxied `/api` and `/ws`) · `pnpm assets` · `pnpm test` · `pnpm e2e` ·
+`pnpm perf` · `pnpm check:budgets` · `pnpm loadtest [--duration 300 | --soak 1800 | --selftest]` ·
+`pnpm reports [--since 7d]` (chat reports for owner review) · `pnpm verify`
 
-Debug URLs: `?debug=1` (FPS overlay + `window.__hht`), `?perf=1` (Masterpiece reference scene),
-`?shot=closeup|masterpiece|overview` (art comparison cameras), `?q=low|high` (quality tier).
+Debug URLs:
 
-Status: feature 001 is implemented and `pnpm verify` is green. The phase gate is in
-`specs/001-single-player-prototype/gate.md` (playtests and device fps are still pending).
+- `?debug=1`: FPS overlay plus `window.__hht` (in multiplayer, `__hht.net`)
+- `?solo=1`: the 001 single-player game, with no server
+- `?w=<n>`: invite link to world n
+- `?perf=1`: the solo Masterpiece reference scene
+- `?perf=crowd`: 100 workers plus 12 towers, offline
+- `?shot=closeup|masterpiece|overview`: art comparison cameras
+- `?q=low|high`: quality tier
+
+Server env: `HHT_PORT`, `HHT_DB`, `HHT_SHIFT_MINUTES`, `HHT_MAX_PLAYERS`, `HHT_METRICS=1`,
+`HHT_DEV_CHEATS=1`, `HHT_MM_PER_MIN`, `HHT_BLOCKLIST_DIR`.
+
+Status: feature 001 is done (gate in `specs/001-single-player-prototype/gate.md`). Feature 002 is in
+`specs/002-multiplayer-core/` (gate in its `gate.md`).
 
 ## Rules of thumb
 
 - Game rules go in `packages/shared` as pure functions with unit tests.
+- Multiplayer is server-authoritative. Clients send only inputs and intents (`shared/protocol.ts`).
+  Movement uses only the deterministic `stepWorker()` (`shared/kinematics.ts`) on both sides, so
+  never add client-only movement code. Server systems orchestrate; rules stay pure.
+- The binary world snapshot message is `ws`. `snap` is the JSON "piece snapped" event.
 - Never exceed the budgets in `tools/assets/budgets.json`. The critical payload must stay ≤ 5 MB.
 - The visual look must match the reference renders: a 2-band toon ramp with shadow tint
   (0.50, 0.52, 0.66), plus inverted-hull outlines.
-- Controls stay "move + action + toss (+ jump)", and there is no free-text input.
+- Controls stay "move + action + toss (+ jump)". Names are generated (no free-text names). Chat is
+  the only free-text input and must follow the moderation baseline in constitution v1.1.0
+  (Principle V).
 - Only original assets are allowed; never copy other games' content.

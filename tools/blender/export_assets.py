@@ -6,7 +6,8 @@ Usage (from the repo root):
 For every asset: build it in a clean scene, bake modifiers, merge meshes per material inside each
 animatable/instanceable group node, drop helper empties, export to assets/build/raw/<id>.glb and
 record it in assets/build/raw/assets.json (consumed by tools/assets/compress.mjs).
-Also regenerates packages/client/src/render/palette.gen.ts from builders/palette.py.
+Also regenerates packages/client/src/render/palette.gen.ts from builders/palette.py and
+packages/shared/src/site.gen.ts from builders/site_layout.py.
 """
 import json
 import os
@@ -20,7 +21,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, '..', '..'))
 sys.path.insert(0, HERE)
 
-from builders import clock_tower, fx, lot, pieces, worker  # noqa: E402
+from builders import clock_tower, foreman, fx, lot, pieces, props_mp, site, site_layout, worker  # noqa: E402
 from builders.common import reset_scene  # noqa: E402
 from builders.palette import PALETTE  # noqa: E402
 
@@ -38,6 +39,7 @@ def asset_specs():
              groups=[f'Piece_{p}' for p in PIECE_IDS], keep=['Pieces']),
         dict(id='lot', group='critical', build=lot.build, groups=['Lot'],
              keep=['Spawn', 'TowerPlot'] + [f'Rack_{p}_Top' for p in RACK_IDS + ['cone']]),
+        dict(id='site', group='critical', build=site.build, groups=['Site'], keep=['Site']),
         dict(id='fx', group='deferred', build=fx.build,
              groups=['Fx_puff', 'Fx_confetti', 'Fx_sparkle', 'Fx_ray'], keep=['Fx']),
     ]
@@ -45,7 +47,80 @@ def asset_specs():
         specs.append(dict(id=f'clock-tower-stage-{n}', group='critical' if n <= 1 else 'deferred',
                           build=(lambda n=n: clock_tower.build(n)), groups=[f'ClockTower_Stage{n}'],
                           keep=['Sign_Stars', 'BuildZone'], scale=clock_tower.TOWER_SCALE))
+    # feature 002: Foreman, plot props, and two tower LODs per stage for the 12-plot site (research R7)
+    specs.append(dict(id='foreman', group='critical', build=foreman.build,
+                      groups=['Body', 'Head', 'Arm_L', 'Arm_R', 'Leg_L', 'Leg_R'], keep=['Foreman']))
+    specs.append(dict(id='props-mp', group='critical', build=props_mp.build, groups=['PlotSign', 'SupplyBin'],
+                      keep=['PropsMP', 'PlotSign_Face', 'PlotSign_Flag', 'SupplyBin_Top']))
+    for n in range(1, 7):
+        # LOD0: toon colors baked to vertex colors → one toon mesh + brick + glows (≤ 15 draws with outlines)
+        specs.append(dict(id=f'clock-tower-stage-{n}-merged', group='deferred', build=(lambda n=n: clock_tower.build(n)),
+                          groups=[f'ClockTower_Stage{n}'], keep=['Sign_Stars'], scale=clock_tower.TOWER_SCALE, vcol='keep-special'))
+        # LOD1: everything in one vertex-colored mesh, decimated (1 draw, critical so far towers show at once)
+        specs.append(dict(id=f'clock-tower-lod1-{n}', group='critical', build=(lambda n=n: clock_tower.build(n)),
+                          groups=[f'ClockTower_Stage{n}'], keep=[], scale=clock_tower.TOWER_SCALE, vcol='all', decimate=2800))
     return specs
+
+
+def _base_color(mat):
+    """Linear base (or emission) color of a builder material."""
+    bsdf = mat.node_tree.nodes.get('Principled BSDF') if mat.node_tree else None
+    if bsdf is None:
+        return tuple(mat.diffuse_color[:3])
+    if mat.name.startswith('G_'):
+        c = bsdf.inputs['Emission Color'].default_value
+        return (c[0], c[1], c[2])
+    c = bsdf.inputs['Base Color'].default_value
+    return (c[0], c[1], c[2])
+
+
+def bake_vertex_colors(mode):
+    """Replace toon materials by one vertex-colored T_vcol material (mode 'all' also bakes glow/brick)."""
+    vmat = bpy.data.materials.get('T_vcol')
+    if vmat is None:
+        vmat = bpy.data.materials.new('T_vcol')
+        vmat.use_nodes = True
+        bsdf = vmat.node_tree.nodes.get('Principled BSDF')
+        bsdf.inputs['Base Color'].default_value = (1, 1, 1, 1)
+        attr = vmat.node_tree.nodes.new('ShaderNodeVertexColor')
+        attr.layer_name = 'Col'
+        vmat.node_tree.links.new(attr.outputs['Color'], bsdf.inputs['Base Color'])
+    for obj in list(bpy.data.objects):
+        if obj.type != 'MESH' or not obj.material_slots or not obj.material_slots[0].material:
+            continue
+        mat = obj.material_slots[0].material
+        if mode != 'all' and (mat.name.startswith('G_') or mat.name == 'T_brickwall'):
+            continue
+        col = _base_color(mat)
+        if mat.name == 'T_brickwall':
+            col = tuple(x ** 2.2 for x in (0.80, 0.36, 0.26))
+        me = obj.data
+        if me.users > 1:
+            obj.data = me = me.copy()
+        attr = me.color_attributes.get('Col') or me.color_attributes.new('Col', 'BYTE_COLOR', 'CORNER')
+        for d in attr.data:
+            d.color = (col[0], col[1], col[2], 1.0)
+        me.color_attributes.active_color = attr
+        obj.material_slots[0].material = vmat
+
+
+def decimate(objs, target_tris):
+    """Collapse-decimate the merged meshes to roughly `target_tris` triangles in total."""
+    total = sum(sum(len(p.vertices) - 2 for p in o.data.polygons) for o in objs)
+    ratio = min(1.0, target_tris / max(1, total))
+    if ratio >= 0.999:
+        return
+    for o in objs:
+        mod = o.modifiers.new('Decimate', 'DECIMATE')
+        mod.ratio = ratio
+        mod.use_collapse_triangulate = True
+    depsgraph = bpy.context.evaluated_depsgraph_get()
+    for o in objs:
+        me = bpy.data.meshes.new_from_object(o.evaluated_get(depsgraph))
+        o.modifiers.clear()
+        old = o.data
+        o.data = me
+        bpy.data.meshes.remove(old)
 
 
 def nearest_group(obj, groups):
@@ -123,7 +198,11 @@ def export(spec):
     if spec.get('scale'):
         root.scale = (spec['scale'],) * 3
     bpy.context.view_layer.update()
+    if spec.get('vcol'):
+        bake_vertex_colors(spec['vcol'])
     merged = merge_groups(spec['groups'])
+    if spec.get('decimate'):
+        decimate(merged, spec['decimate'])
     keep = set(spec['groups']) | set(spec['keep']) | {root.name}
     prune_empties(keep)
     bpy.context.view_layer.update()
@@ -132,7 +211,8 @@ def export(spec):
     bpy.ops.export_scene.gltf(filepath=path, export_format='GLB', export_yup=True, export_apply=False,
                               export_cameras=False, export_lights=False, export_animations=False,
                               export_extras=False, export_materials='EXPORT',
-                              export_texcoords=False, export_normals=True)
+                              export_texcoords=False, export_normals=True,
+                              export_vertex_color='ACTIVE' if spec.get('vcol') else 'NONE')
     tris = sum(sum(len(p.vertices) - 2 for p in o.data.polygons) for o in merged)
     nodes = sorted(keep)
     return dict(id=spec['id'], file=f"{spec['id']}.glb", group=spec['group'], nodes=nodes,
@@ -171,6 +251,7 @@ def main():
     with open(index_path, 'w') as f:
         json.dump({'assets': [existing[i] for i in order if i in existing]}, f, indent=2)
     write_palette_ts()
+    print(f'[export] site layout -> {site_layout.write_ts(ROOT)}')
     print(f'[export] done: {len(results)} assets in {time.time() - t0:.1f}s')
 
 

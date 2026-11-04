@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { isValidGuestName, seededRng } from '@hht/shared';
-import { PROFILE_KEY, ProfileStore, type StorageLike } from '../src/profile/guestProfile.ts';
+import { LEGACY_PROFILE_KEY, PROFILE_KEY, ProfileStore, type StorageLike } from '../src/profile/guestProfile.ts';
 
 class MemStorage implements StorageLike {
   data = new Map<string, string>();
@@ -18,10 +18,29 @@ describe('ProfileStore', () => {
     const store = new ProfileStore(s, seededRng(1));
     const p = store.get();
     expect(isValidGuestName(p.name)).toBe(true);
-    expect(p.version).toBe(1);
+    expect(p.version).toBe(2);
+    expect(p.playerKey).toMatch(/^[0-9a-f]{32}$/);
+    expect(p.lastWorld).toBeNull();
+    expect(p.hideAllChat).toBe(false);
     expect(p.hintsDone).toEqual({ firstPickup: false, firstSnap: false });
     expect(JSON.parse(s.getItem(PROFILE_KEY) as string).name).toBe(p.name);
     expect(store.persistent).toBe(true);
+  });
+
+  it('migrates a v1 profile, keeping name, hat, mute and hints', () => {
+    const s = new MemStorage();
+    s.setItem(LEGACY_PROFILE_KEY, JSON.stringify({ version: 1, name: 'Sunny Bolt', hatColor: 'pink', muted: true, hintsDone: { firstPickup: true, firstSnap: false }, createdAt: '2026-11-01T00:00:00Z' }));
+    const p = new ProfileStore(s, seededRng(5)).get();
+    expect(p).toMatchObject({ version: 2, name: 'Sunny Bolt', hatColor: 'pink', muted: true, hintsDone: { firstPickup: true, firstSnap: false }, lastWorld: null, hideAllChat: false });
+    expect(p.playerKey).toMatch(/^[0-9a-f]{32}$/);
+    expect(JSON.parse(s.getItem(PROFILE_KEY) as string).playerKey).toBe(p.playerKey);
+  });
+
+  it('keeps the same player key across visits', () => {
+    const s = new MemStorage();
+    const a = new ProfileStore(s, seededRng(6)).get().playerKey;
+    const b = new ProfileStore(s, seededRng(7)).get().playerKey;
+    expect(b).toBe(a);
   });
 
   it('remembers the same name and hat color on the next visit', () => {

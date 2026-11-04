@@ -5,6 +5,7 @@ test('loads without login and the worker moves with the keyboard', async ({ page
   const errors = await openGame(page);
   const before = await state(page);
   expect(before.profile.name.length).toBeGreaterThanOrEqual(3);
+  await page.bringToFront();
   await page.locator('#game').focus();
   // headless browsers render in software (low fps), so hold the key until the worker has moved
   await page.keyboard.down('KeyW');

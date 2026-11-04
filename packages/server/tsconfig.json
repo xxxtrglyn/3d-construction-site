@@ -1,1 +1,9 @@
-{ "extends": "../../tsconfig.base.json", "include": [] }
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2024"],
+    "types": ["node"],
+    "erasableSyntaxOnly": true
+  },
+  "include": ["src", "test", "loadtest", "scripts"]
+}

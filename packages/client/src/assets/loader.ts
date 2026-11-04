@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
 import { addOutline } from '../render/outline.ts';
-import { glowMaterial, toonMaterial } from '../render/toonMaterial.ts';
+import { glowMaterial, toonMaterial, toonVcolMaterial } from '../render/toonMaterial.ts';
 
 export interface ManifestAsset {
   id: string;
@@ -100,6 +100,11 @@ export class AssetStore {
         mesh.material = glowMaterial(name.slice(2), src.emissive.clone(), strength);
         mesh.castShadow = false;
         mesh.receiveShadow = false;
+      } else if (name === 'T_vcol') {
+        palette = 'vcol';
+        mesh.material = toonVcolMaterial();
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
       } else {
         palette = name.startsWith('T_') ? name.slice(2) : 'white';
         mesh.material = toonMaterial(palette);

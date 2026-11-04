@@ -100,6 +100,17 @@ export function toonMaterial(paletteName: string, opts: ToonOptions = {}): THREE
   return mat;
 }
 
+/** Toon material that takes its colors from vertex colors (merged tower LODs, material T_vcol). */
+export function toonVcolMaterial(): THREE.MeshToonMaterial {
+  const hit = cache.get('T_vcol');
+  if (hit) return hit as THREE.MeshToonMaterial;
+  const mat = new THREE.MeshToonMaterial({ color: 0xffffff, vertexColors: true, name: 'T_vcol' });
+  patch(mat, {});
+  mat.customProgramCacheKey = () => 'hht-toon-vcol';
+  cache.set('T_vcol', mat);
+  return mat;
+}
+
 /** Toon material from an arbitrary color (runtime tints like the hard hat). */
 export function toonFromColor(color: THREE.ColorRepresentation, name = 'T_custom'): THREE.MeshToonMaterial {
   const mat = new THREE.MeshToonMaterial({ color, name });

@@ -23,7 +23,10 @@ export class PieceRenderer {
   readonly halfHeight = new Map<PieceTypeId, number>();
   readonly bounds = new Map<PieceTypeId, THREE.Box3>();
 
-  constructor(piecesAsset: THREE.Object3D) {
+  readonly capacity: number;
+
+  constructor(piecesAsset: THREE.Object3D, capacity = CAPACITY) {
+    this.capacity = capacity;
     this.group.name = 'Pieces';
     piecesAsset.updateMatrixWorld(true);
     for (const type of PIECE_TYPE_IDS) {
@@ -36,7 +39,7 @@ export class PieceRenderer {
         const m = o as THREE.Mesh;
         if (!m.isMesh || m.userData.isOutline) return;
         const local = nodeInv.clone().multiply(m.matrixWorld);
-        const inst = new THREE.InstancedMesh(m.geometry, m.material, CAPACITY);
+        const inst = new THREE.InstancedMesh(m.geometry, m.material, capacity);
         inst.name = `${type}:${m.name}`;
         inst.count = 0;
         inst.castShadow = true;
@@ -62,7 +65,7 @@ export class PieceRenderer {
 
   add(type: PieceTypeId, world: THREE.Matrix4): void {
     const i = this.counts.get(type) ?? 0;
-    if (i >= CAPACITY) return;
+    if (i >= this.capacity) return;
     for (const s of this.subs.get(type) ?? []) {
       this.tmp.multiplyMatrices(world, s.local);
       s.mesh.setMatrixAt(i, this.tmp);
