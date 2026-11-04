@@ -27,8 +27,8 @@ export function sendSnapshots(io: SnapshotIo, sessions: Iterable<Session>, tick:
       const dx = e.worker.x - rx.worker.x;
       const dz = e.worker.z - rx.worker.z;
       const d = Math.sqrt(dx * dx + dz * dz);
-      const tier: Tier = tierFor(d, rx.tiers.get(e.netId) ?? 0);
-      rx.tiers.set(e.netId, tier);
+      const tier: Tier = tierFor(d, rx.tiers[e.netId] as Tier | 0);
+      rx.tiers[e.netId] = tier;
       if (!isDue(tier, tick, e.netId)) continue;
       const r = records[n++] as EntityRecord;
       r.netId = e.netId;

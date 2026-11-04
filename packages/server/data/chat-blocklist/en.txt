@@ -1,0 +1,79 @@
+# English chat blocklist (constitution v1.1.0, Principle V; research R16). Server only, hot-reloaded.
+# Format: one term per line, lowercase; "#" starts a comment. Matching is word-bounded.
+# Plain ASCII terms also match letter swaps (f*ck, sh1t), repeated letters and spaced-out letters,
+# so list inflections separately (fuck / fucking) but not spelling variants.
+# Deliberately NOT listed (normal construction-site words): screw, hooker, erection, hoe, tool, nut.
+
+# profanity
+fuck
+fucks
+fucked
+fucker
+fuckers
+fucking
+fuk
+fck
+motherfucker
+shit
+shits
+shitty
+bullshit
+bitch
+bitches
+bastard
+asshole
+ass
+dick
+dickhead
+cock
+cocksucker
+pussy
+cunt
+twat
+wanker
+prick
+piss
+pissed
+damn
+goddamn
+
+# sexual
+slut
+whore
+porn
+porno
+sex
+sexy
+nude
+nudes
+boobs
+tits
+cum
+jizz
+dildo
+blowjob
+handjob
+horny
+rape
+rapist
+
+# slurs
+nigger
+niggers
+nigga
+faggot
+fag
+retard
+retarded
+chink
+spic
+kike
+gook
+coon
+wetback
+tranny
+paki
+
+# self-harm harassment
+kys
+kill yourself

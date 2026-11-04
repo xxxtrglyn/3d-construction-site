@@ -1,5 +1,5 @@
 import type { Client, Deferred } from '@colyseus/core';
-import type { Bucket, MoveInput, RateClass, StrikeWindow, Tier, WorkerState } from '@hht/shared';
+import type { Bucket, MoveInput, RateClass, StrikeWindow, WorkerState } from '@hht/shared';
 
 export interface ChatLine {
   text: string;
@@ -34,8 +34,8 @@ export interface Session {
   buckets: Record<RateClass, Bucket>;
   strikes: StrikeWindow;
   lastSlowDownAt: number;
-  /** interest tier of every other entity as seen by this receiver */
-  tiers: Map<number, Tier>;
+  /** interest tier (0 = unseen, else 1–3) of every other entity, indexed by netId (≤ 0xffff) */
+  tiers: Uint8Array;
   /** players this session hid (only used to filter join requests) */
   hidden: Set<string>;
   emoteUntil: number;

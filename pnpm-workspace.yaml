@@ -1,3 +1,5 @@
 packages:
   - "packages/*"
 onlyBuiltDependencies: []
+overrides:
+  '@colyseus/core': 0.18.23

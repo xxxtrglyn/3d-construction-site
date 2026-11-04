@@ -1,6 +1,6 @@
 import { Client, type Room } from '@colyseus/sdk';
 import {
-  CLOCK_TOWER, EMOTE_IDS, PROTOCOL_VERSION, QUICK_MESSAGE_IDS, SITE, currentStage, decodeSnapshot, encodeMoveInputs,
+  CHAT, CLOCK_TOWER, EMOTE_IDS, PROTOCOL_VERSION, QUICK_MESSAGE_IDS, SITE, currentStage, decodeSnapshot, encodeMoveInputs,
   generateName, quantizeDir, randomHatColor, seededRng, type MoveInput, type PieceTypeId, type Rng, type WorkerState,
 } from '@hht/shared';
 
@@ -11,6 +11,8 @@ export interface BotStats {
   behaviors: Record<string, number>;
   rtts: number[];
   chatOutsideChannel: number;
+  /** Chats that looked out of channel on arrival but were fine once the next patch landed (ordering race). */
+  chatRechecked: number;
   disconnects: number;
   connected: boolean;
 }
@@ -50,7 +52,7 @@ export class Bot {
   private readonly host: boolean;
   private readonly remote = new Map<string, { x: number; z: number }>();
   private netToPid = new Map<number, string>();
-  readonly stats: BotStats = { bytesIn: 0, bytesOut: 0, behaviors: {}, rtts: [], chatOutsideChannel: 0, disconnects: 0, connected: false };
+  readonly stats: BotStats = { bytesIn: 0, bytesOut: 0, behaviors: {}, rtts: [], chatOutsideChannel: 0, chatRechecked: 0, disconnects: 0, connected: false };
   private readonly base: string;
 
   constructor(id: number, base: string, seed: number) {
@@ -62,6 +64,18 @@ export class Bot {
 
   private count(b: string): void {
     this.stats.behaviors[b] = (this.stats.behaviors[b] ?? 0) + 1;
+  }
+
+  /** True if a received chat is outside what this bot's channel rules allow (SC-008). */
+  private chatLooksOutside(p: Record<string, unknown>): boolean {
+    if (p.channel === 'crew') {
+      const mine = this.state.players.get(this.me);
+      const from = this.state.players.get(p.from as string);
+      return !mine || !from || mine.crewPlot < 0 || mine.crewPlot !== from.crewPlot;
+    }
+    if (!this.own || p.from === this.me) return false;
+    const r = this.remote.get(p.from as string);
+    return !!r && Math.hypot(r.x - this.own.x, r.z - this.own.z) > CHAT.nearbyM + 8;
   }
 
   private send(type: string, payload: unknown): void {
@@ -152,13 +166,14 @@ export class Bot {
         else this.setMode('wander');
         break;
       case 'chat': {
-        const mine = this.state.players.get(this.me);
-        const from = this.state.players.get(p.from as string);
-        if (p.channel === 'crew') {
-          if (!mine || !from || mine.crewPlot < 0 || mine.crewPlot !== from.crewPlot) this.stats.chatOutsideChannel++;
-        } else if (this.own && p.from !== this.me) {
-          const r = this.remote.get(p.from as string);
-          if (r && Math.hypot(r.x - this.own.x, r.z - this.own.z) > 20 + 8) this.stats.chatOutsideChannel++;
+        // Messages are sent at once but state patches and snapshots land on the next tick, so a chat
+        // right after a crew join or from someone just entering interest range can look wrong on
+        // arrival. Count it only if it still looks wrong once a few patches have landed.
+        if (this.chatLooksOutside(p)) {
+          setTimeout(() => {
+            if (this.chatLooksOutside(p)) this.stats.chatOutsideChannel++;
+            else this.stats.chatRechecked++;
+          }, 300);
         }
         break;
       }

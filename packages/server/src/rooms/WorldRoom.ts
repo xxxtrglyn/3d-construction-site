@@ -170,7 +170,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
       buckets: newBuckets(now),
       strikes: { times: [] },
       lastSlowDownAt: 0,
-      tiers: new Map(),
+      tiers: new Uint8Array(0x10000),
       hidden: new Set(),
       emoteUntil: 0,
       bytesSent: 0,
@@ -238,7 +238,7 @@ export class WorldRoom extends Room<{ state: WorldState }> {
     if (!this.ctx.shuttingDown) this.systems.onRemove(s);
     this.sessions.delete(s.pid);
     this.state.players.delete(s.pid);
-    for (const other of this.sessions.values()) other.tiers.delete(s.netId);
+    for (const other of this.sessions.values()) other.tiers[s.netId] = 0;
     if (this.sessions.size === 0) this.emptySince = this.now();
   }
 

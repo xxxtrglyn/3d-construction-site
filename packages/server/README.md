@@ -48,6 +48,18 @@ pnpm loadtest --selftest            # proves a slow tick fails the budget
 pnpm loadtest --url http://host:2567 --duration 600   # against a running server
 ```
 
+Reading the results:
+
+- The soak's `heapSlopeMbPerMin` is fitted to the heap retained after a forced full GC, sampled once
+  a minute from minute 3 (the script runs Node with `--expose-gc`). A fit over raw `heapUsed`
+  follows V8's GC sawtooth and is noise; the report keeps it as `rawSlopeMbPerMin` for reference.
+- Bots run in worker threads of the same process, so on a laptop they compete with the server for
+  cores and `tickMs` is wall-clock time under that contention. For numbers that represent
+  production, run the bots from another machine with `--url`.
+- `chatRechecked` counts chats that looked out of channel on arrival, only because the state patch
+  had not landed yet, and were fine 300 ms later. Only chats that still look wrong count toward
+  `consistency.chatOutsideChannel`.
+
 ## Chat moderation
 
 The blocklists are `data/chat-blocklist/en.txt` and `vi.txt`, one term per line. Accented terms

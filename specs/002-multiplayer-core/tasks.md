@@ -673,9 +673,9 @@ server shows "Join others". `?solo=1` makes no network requests.
   - **Debug URLs**: add `?solo=1`, `?w=<n>` and `?perf=crowd`.
   - **Rules of thumb**: shared kinematics are the only movement code in multiplayer, and the server is authoritative.
 - [X] T125 [P] Update `packages/server/README.md` with the environment variables, the HTTP endpoints, how to run tests and the load test, how to review reports, and the next steps for production hosting (out of scope).
-- [ ] T126 Run `pnpm verify` (including the quick load test) and the WebKit e2e (`pnpm --filter @hht/client e2e:webkit` after `sudo npx playwright install-deps`). Fix any failures.
-- [ ] T127 Run the 30-minute soak (`pnpm loadtest --soak 1800`) and the full 5-minute run, and link both reports.
-- [ ] T128 Create `specs/002-multiplayer-core/gate.md` from the quickstart's "Phase validation gate". Record the automated results, the load-test and soak numbers, restore within 15 s, and which items are pending on real devices, the playtest and the owner's art review (Foreman and site renders).
+- [X] T126 Run `pnpm verify` (including the quick load test) and the WebKit e2e (`pnpm --filter @hht/client e2e:webkit` after `sudo npx playwright install-deps`). Fix any failures.
+- [X] T127 Run the 30-minute soak (`pnpm loadtest --soak 1800`) and the full 5-minute run, and link both reports.
+- [X] T128 Create `specs/002-multiplayer-core/gate.md` from the quickstart's "Phase validation gate". Record the automated results, the load-test and soak numbers, restore within 15 s, and which items are pending on real devices, the playtest and the owner's art review (Foreman and site renders).
 
 ---
 

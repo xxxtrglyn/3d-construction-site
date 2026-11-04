@@ -66,6 +66,12 @@ async function main(): Promise<void> {
   // per-second samples
   const bytesPerBot: number[] = [];
   const heap: Array<[number, number]> = [];
+  // Soak: the raw heapUsed samples follow V8's GC sawtooth, so a least-squares fit over them is
+  // noise. Once a minute, force a full GC (node --expose-gc) and record the retained heap; the slope
+  // is fitted to that, after a 3-minute settle (startup allocations are freed first).
+  const forceGc = (globalThis as { gc?: () => void }).gc;
+  const retained: Array<[number, number]> = [];
+  const RETAINED_FROM_S = 180;
   let lastBytes = new Map<number, number>();
   const t0 = Date.now();
   let peakHeap = 0;
@@ -84,6 +90,10 @@ async function main(): Promise<void> {
     const mem = server ? process.memoryUsage().heapUsed / 1048576 : 0;
     peakHeap = Math.max(peakHeap, mem);
     if (s % 5 === 0) heap.push([now / 60, mem]);
+    if (server && soak && forceGc && s % 60 === 0) {
+      forceGc();
+      if (s >= RETAINED_FROM_S) retained.push([now / 60, process.memoryUsage().heapUsed / 1048576]);
+    }
     if (s % 30 === 0 || s === duration) {
       const w1 = server?.ctx.worlds.get(1);
       console.log(`[loadtest] t=${s}s bots=${all.filter((b) => b.connected).length} players=${w1?.sessions.size ?? '?'} tick p99=${w1 ? w1.metricsRef.tickMs.stats().p99.toFixed(2) : '?'}ms heap=${mem.toFixed(0)}MB`);
@@ -127,7 +137,9 @@ async function main(): Promise<void> {
   const behaviors: Record<string, number> = {};
   for (const b of all) for (const [k, v] of Object.entries(b.behaviors)) behaviors[k] = (behaviors[k] ?? 0) + v;
   const bytes = dist(bytesPerBot);
-  const heapSlope = slope(heap);
+  const rawHeapSlope = slope(heap);
+  const heapSlope = retained.length >= 3 ? slope(retained) : rawHeapSlope;
+  const heapSlopeBasis = retained.length >= 3 ? 'retained after full GC, 1/min' : 'raw heapUsed (no --expose-gc)';
   const rows: BudgetRow[] = [
     { name: 'ticksPerS.avg', limit: budgets.ticksPerSMin as number, actual: ticksPerS, pass: ticksPerS >= (budgets.ticksPerSMin as number) },
     { name: 'tickMs.avg', limit: budgets.tickMsAvg as number, actual: tickStats.avg, pass: tickStats.avg <= (budgets.tickMsAvg as number) },
@@ -148,15 +160,15 @@ async function main(): Promise<void> {
   }
   const report = {
     version: 1, startedAt, durationS: duration, mode, gitCommit,
-    bots: { count: botCount, connected, disconnects: all.reduce((s, b) => s + b.disconnects, 0), behaviors, errors: errors.slice(0, 10) },
-    server: { tickMs: tickStats, encodeMs: encodeStats, sqliteMs: sqliteStats, eventLoopDelayMs: metricsSnap.eventLoopDelayMs, gcPauseMs: metricsSnap.gcPauseMs, ticksPerS, heapMb: { start: startHeap, peak: peakHeap, end: process.memoryUsage().heapUsed / 1048576, slopeMbPerMin: heapSlope }, rssMb: metricsSnap.rssMb },
+    bots: { count: botCount, connected, disconnects: all.reduce((s, b) => s + b.disconnects, 0), chatRechecked: all.reduce((s, b) => s + b.chatRechecked, 0), behaviors, errors: errors.slice(0, 10) },
+    server: { tickMs: tickStats, encodeMs: encodeStats, sqliteMs: sqliteStats, eventLoopDelayMs: metricsSnap.eventLoopDelayMs, gcPauseMs: metricsSnap.gcPauseMs, ticksPerS, heapMb: { start: startHeap, peak: peakHeap, end: process.memoryUsage().heapUsed / 1048576, slopeMbPerMin: heapSlope, slopeBasis: heapSlopeBasis, rawSlopeMbPerMin: rawHeapSlope, retained }, rssMb: metricsSnap.rssMb },
     clients: { bytesInPerS: bytes, rttMs: dist(all.flatMap((b) => b.rtts)) },
     consistency,
     budgets: rows,
     pass,
   };
   const file = writeReport(ROOT, report);
-  printSummary(rows, [['behaviors', JSON.stringify(behaviors)], ['bytes/bot/s (p95/max)', `${bytes.p95} / ${bytes.max}`], ['report', file]]);
+  printSummary(rows, [['behaviors', JSON.stringify(behaviors)], ['bytes/bot/s (p95/max)', `${bytes.p95} / ${bytes.max}`], ...(soak ? [['heap slope basis', `${heapSlopeBasis} (raw fit ${rawHeapSlope.toFixed(2)} MB/min)`] as [string, string]] : []), ['chat rechecks (ordering race)', String(all.reduce((s, b) => s + b.chatRechecked, 0))], ['report', file]]);
   for (const w of workers) w.postMessage({ type: 'stop' });
   await sleep(1500);
   for (const w of workers) await w.terminate();
