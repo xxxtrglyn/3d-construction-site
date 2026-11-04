@@ -1,0 +1,27 @@
+{
+  "name": "hard-hat-town",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.33.4",
+  "engines": { "node": ">=20.19" },
+  "scripts": {
+    "dev": "pnpm --filter @hht/client dev",
+    "build": "pnpm --filter @hht/client build",
+    "preview": "pnpm --filter @hht/client preview",
+    "assets": "node tools/assets/run-pipeline.mjs",
+    "assets:compress": "node tools/assets/compress.mjs",
+    "typecheck": "pnpm -r typecheck",
+    "test": "pnpm -r test",
+    "e2e": "pnpm --filter @hht/client e2e",
+    "perf": "pnpm --filter @hht/client perf",
+    "check:budgets": "node tools/assets/check-budgets.mjs",
+    "verify": "pnpm typecheck && pnpm test && pnpm build && pnpm check:budgets && pnpm e2e && pnpm perf"
+  },
+  "devDependencies": {
+    "@gltf-transform/core": "4.5.1",
+    "@gltf-transform/extensions": "4.5.1",
+    "@gltf-transform/functions": "4.5.1",
+    "meshoptimizer": "1.3.0",
+    "typescript": "7.0.2"
+  }
+}

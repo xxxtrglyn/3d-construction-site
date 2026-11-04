@@ -1,0 +1,10 @@
+{
+  "name": "@hht/server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "typecheck": "echo \"server: placeholder (phase 2)\"",
+    "test": "echo \"server: placeholder (phase 2)\""
+  }
+}
