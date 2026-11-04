@@ -1,0 +1,126 @@
+{
+  "version": 1,
+  "generatedAt": "2026-11-04T13:16:43.023Z",
+  "sounds": [
+    {
+      "id": "music-site",
+      "file": "music-site.mp3",
+      "kind": "music",
+      "loop": true,
+      "volume": 0.32,
+      "bytes": 719978,
+      "sha256": "774e44c0ca7a48a6",
+      "source": "ElevenLabs (generated, original)"
+    },
+    {
+      "id": "engine-diesel",
+      "file": "engine-diesel.mp3",
+      "kind": "sfx",
+      "loop": true,
+      "volume": 0.5,
+      "bytes": 32643,
+      "sha256": "f23103a77e2c9098",
+      "source": "ElevenLabs (generated, original)"
+    },
+    {
+      "id": "forklift-motor",
+      "file": "forklift-motor.mp3",
+      "kind": "sfx",
+      "loop": true,
+      "volume": 0.45,
+      "bytes": 24493,
+      "sha256": "e175688ee9a6e084",
+      "source": "ElevenLabs (generated, original)"
+    },
+    {
+      "id": "crane-winch",
+      "file": "crane-winch.mp3",
+      "kind": "sfx",
+      "loop": true,
+      "volume": 0.45,
+      "bytes": 24493,
+      "sha256": "089fe0a957541a49",
+      "source": "ElevenLabs (generated, original)"
+    },
+    {
+      "id": "mixer-drum",
+      "file": "mixer-drum.mp3",
+      "kind": "sfx",
+      "loop": true,
+      "volume": 0.5,
+      "bytes": 32643,
+      "sha256": "ab071165f6d1472e",
+      "source": "ElevenLabs (generated, original)"
+    },
+    {
+      "id": "hydraulic",
+      "file": "hydraulic.mp3",
+      "kind": "sfx",
+      "loop": false,
+      "volume": 0.6,
+      "bytes": 8611,
+      "sha256": "87df6f3ad06eaa59",
+      "source": "ElevenLabs (generated, original)"
+    },
+    {
+      "id": "scoop-dirt",
+      "file": "scoop-dirt.mp3",
+      "kind": "sfx",
+      "loop": false,
+      "volume": 0.7,
+      "bytes": 8611,
+      "sha256": "c5231b0c2cf2708d",
+      "source": "ElevenLabs (generated, original)"
+    },
+    {
+      "id": "dump-dirt",
+      "file": "dump-dirt.mp3",
+      "kind": "sfx",
+      "loop": false,
+      "volume": 0.7,
+      "bytes": 10074,
+      "sha256": "8f987fd088c89def",
+      "source": "ElevenLabs (generated, original)"
+    },
+    {
+      "id": "hook-clank",
+      "file": "hook-clank.mp3",
+      "kind": "sfx",
+      "loop": false,
+      "volume": 0.6,
+      "bytes": 6939,
+      "sha256": "f232d9a14bc4af9d",
+      "source": "ElevenLabs (generated, original)"
+    },
+    {
+      "id": "pallet-clunk",
+      "file": "pallet-clunk.mp3",
+      "kind": "sfx",
+      "loop": false,
+      "volume": 0.6,
+      "bytes": 7566,
+      "sha256": "31041dc647059155",
+      "source": "ElevenLabs (generated, original)"
+    },
+    {
+      "id": "concrete-pour",
+      "file": "concrete-pour.mp3",
+      "kind": "sfx",
+      "loop": false,
+      "volume": 0.65,
+      "bytes": 10074,
+      "sha256": "ffe941acbe5424c9",
+      "source": "ElevenLabs (generated, original)"
+    },
+    {
+      "id": "mix-done",
+      "file": "mix-done.mp3",
+      "kind": "sfx",
+      "loop": false,
+      "volume": 0.5,
+      "bytes": 6939,
+      "sha256": "cb0a9035b20a72c3",
+      "source": "ElevenLabs (generated, original)"
+    }
+  ]
+}

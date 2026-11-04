@@ -1,0 +1,41 @@
+# Vietnamese chat blocklist (constitution v1.1.0, Principle V; research R16). Server only, hot-reloaded.
+# Format: one term per line, lowercase; "#" starts a comment. Matching is word-bounded.
+# Accented terms match only with their accents. Unaccented forms are listed only where they are
+# not everyday words: "lon" (can), "deo" (to wear), "buoi" (session), "cac" (plural) and "dit"
+# are NOT listed without accents.
+
+# profanity (accented)
+đụ
+địt
+đéo
+lồn
+cặc
+buồi
+đĩ
+đụ má
+đụ mẹ
+địt mẹ
+đù má
+con đĩ
+óc chó
+mẹ mày
+
+# common abbreviations and unaccented phrases
+đm
+dm
+dmm
+đmm
+dcm
+đcm
+dkm
+đkm
+cmm
+clm
+vcl
+vkl
+vl
+clgt
+du ma
+du me
+dit me
+dit con me

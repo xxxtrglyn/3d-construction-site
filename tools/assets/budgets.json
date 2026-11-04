@@ -1,0 +1,120 @@
+{
+  "$comment": "Constitution Principle III / spec FR-024. Sizes in bytes (compressed: glb as served, JS gzip). jsGzip raised 1.6->2.0 MB on 2026-11-04: rapier3d-compat inlines its WASM as base64 (~1.6 MB gzip); see research.md R10. 2026-11-04 (002): perAsset for site/foreman/props-mp/tower LODs, render.crowd, net (load test) and modes (which critical assets each boot mode excludes; multiplayer excludes the Rapier chunk). 2026-11-04 (003): perAsset for the 4 machines + LOD1 (deferred: never in the critical payload), render.machines for ?perf=machines. The 700 k high-tier triangle ceiling (render.crowd stays 600 k) awaits owner approval (specs/003-construction-machines/plan.md Complexity Tracking).",
+  "criticalTotal": 5000000,
+  "criticalTarget": 3000000,
+  "jsGzip": 2000000,
+  "perAsset": {
+    "worker": 150000,
+    "lot": 400000,
+    "pieces": 150000,
+    "fx": 100000,
+    "clock-tower-stage-0": 100000,
+    "clock-tower-stage-1": 600000,
+    "clock-tower-stage-2": 600000,
+    "clock-tower-stage-3": 600000,
+    "clock-tower-stage-4": 600000,
+    "clock-tower-stage-5": 600000,
+    "clock-tower-stage-6": 600000,
+    "site": 500000,
+    "foreman": 150000,
+    "props-mp": 120000,
+    "clock-tower-lod1-1": 40000,
+    "clock-tower-stage-1-merged": 600000,
+    "clock-tower-lod1-2": 40000,
+    "clock-tower-stage-2-merged": 600000,
+    "clock-tower-lod1-3": 40000,
+    "clock-tower-stage-3-merged": 600000,
+    "clock-tower-lod1-4": 40000,
+    "clock-tower-stage-4-merged": 600000,
+    "clock-tower-lod1-5": 40000,
+    "clock-tower-stage-5-merged": 600000,
+    "clock-tower-lod1-6": 40000,
+    "clock-tower-stage-6-merged": 600000,
+    "worker-lod1": 80000,
+    "pieces-lod1": 60000,
+    "machine-crane": 220000,
+    "machine-excavator": 200000,
+    "machine-forklift": 150000,
+    "machine-mixer": 120000,
+    "machine-crane-lod1": 30000,
+    "machine-excavator-lod1": 30000,
+    "machine-forklift-lod1": 30000,
+    "machine-mixer-lod1": 30000
+  },
+  "render": {
+    "high": {
+      "drawCalls": 250,
+      "triangles": 400000
+    },
+    "low": {
+      "drawCalls": 150,
+      "triangles": 200000
+    },
+    "crowd": {
+      "high": {
+        "drawCalls": 300,
+        "triangles": 600000
+      },
+      "low": {
+        "drawCalls": 200,
+        "triangles": 300000
+      }
+    },
+    "machines": {
+      "high": {
+        "drawCalls": 300,
+        "triangles": 700000
+      },
+      "low": {
+        "drawCalls": 200,
+        "triangles": 340000
+      }
+    }
+  },
+  "net": {
+    "ticksPerSMin": 19.5,
+    "tickMsAvg": 10,
+    "tickMsP99": 25,
+    "bytesInPerSAvg": 30000,
+    "heapMbPeak": 256,
+    "heapSlopeMbPerMin": 0.5
+  },
+  "modes": {
+    "solo": {
+      "excludeAssets": [
+        "site",
+        "foreman",
+        "props-mp",
+        "clock-tower-lod1-1",
+        "clock-tower-lod1-2",
+        "clock-tower-lod1-3",
+        "clock-tower-lod1-4",
+        "clock-tower-lod1-5",
+        "clock-tower-lod1-6",
+        "worker-lod1",
+        "pieces-lod1"
+      ],
+      "excludeChunks": [
+        "^NetGame-",
+        "^connection-",
+        "^netDebugApi-"
+      ]
+    },
+    "net": {
+      "excludeAssets": [
+        "lot"
+      ],
+      "excludeChunks": [
+        "^Game-"
+      ]
+    }
+  },
+  "deferredOnly": [
+    "^machine-"
+  ],
+  "audio": {
+    "$comment": "Generated music + sound samples (tools/audio/generate-audio.mjs, ElevenLabs). Deferred: loaded after play starts, never part of the critical payload.",
+    "totalBytes": 1200000,
+    "perFileBytes": 800000
+  }
+}

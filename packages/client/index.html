@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+    <meta name="theme-color" content="#b3dcfa" />
+    <title>Hard Hat Town</title>
+    <style>
+      :root { --sky: #b3dcfa; --ink: #2a1a1a; --cream: #fff7e6; --accent: #ffcc2e; }
+      html, body { margin: 0; height: 100%; overflow: hidden; background: var(--sky); touch-action: none;
+        font-family: "Nunito", "Noto Sans", system-ui, -apple-system, "Segoe UI", sans-serif; color: var(--ink);
+        -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent; }
+      #game { position: fixed; inset: 0; width: 100%; height: 100%; display: block; outline: none; }
+      #hud { position: fixed; inset: 0; pointer-events: none; }
+      #loader { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center;
+        gap: 18px; background: var(--sky); z-index: 10; transition: opacity .4s ease; }
+      #loader.hidden { opacity: 0; pointer-events: none; }
+      #loader .hat { width: 84px; height: 52px; background: var(--accent); border: 4px solid var(--ink);
+        border-radius: 60px 60px 8px 8px; position: relative; animation: bob 1s ease-in-out infinite; }
+      #loader .hat::after { content: ""; position: absolute; left: -14px; right: -14px; bottom: -10px; height: 10px;
+        background: var(--accent); border: 4px solid var(--ink); border-radius: 8px; }
+      #loader h1 { margin: 6px 0 0; font-size: 28px; letter-spacing: .5px; }
+      #loader .bar { width: min(280px, 70vw); height: 16px; border: 4px solid var(--ink); border-radius: 12px; background: var(--cream); overflow: hidden; }
+      #loader .fill { height: 100%; width: 0%; background: repeating-linear-gradient(45deg, #ffcc2e 0 12px, #2a1a1a 12px 24px); transition: width .2s ease; }
+      #loader .msg { font-size: 15px; opacity: .8; min-height: 20px; text-align: center; padding: 0 16px; }
+      @keyframes bob { 50% { transform: translateY(-8px) rotate(-4deg); } }
+    </style>
+  </head>
+  <body>
+    <canvas id="game" tabindex="0"></canvas>
+    <div id="hud"></div>
+    <div id="loader">
+      <div class="hat"></div>
+      <h1>Hard Hat Town</h1>
+      <div class="bar"><div class="fill" id="loader-fill"></div></div>
+      <div class="msg" id="loader-msg">Pouring the foundations…</div>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>

@@ -1,0 +1,93 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "hht/loadtest-report.v1",
+  "title": "Hard Hat Town 100-bot load test report",
+  "type": "object",
+  "required": ["version", "startedAt", "durationS", "bots", "server", "clients", "budgets", "pass"],
+  "properties": {
+    "version": { "const": 1 },
+    "startedAt": { "type": "string", "format": "date-time" },
+    "durationS": { "type": "number", "minimum": 1 },
+    "mode": { "enum": ["quick", "full", "soak"] },
+    "gitCommit": { "type": "string" },
+    "bots": {
+      "type": "object",
+      "required": ["count", "connected", "disconnects", "behaviors"],
+      "properties": {
+        "count": { "type": "integer" },
+        "connected": { "type": "integer" },
+        "disconnects": { "type": "integer" },
+        "behaviors": {
+          "type": "object",
+          "description": "Counts of intents sent per type, e.g. grab, toss, deliver, donate, emote, chat, foremanStart, request, approve.",
+          "additionalProperties": { "type": "integer" }
+        }
+      }
+    },
+    "server": {
+      "type": "object",
+      "required": ["tickMs", "heapMb"],
+      "properties": {
+        "tickMs": { "$ref": "#/$defs/dist" },
+        "encodeMs": { "$ref": "#/$defs/dist" },
+        "sqliteMs": { "$ref": "#/$defs/dist" },
+        "eventLoopDelayMs": { "$ref": "#/$defs/dist" },
+        "gcPauseMs": { "$ref": "#/$defs/dist" },
+        "ticksPerS": { "type": "number" },
+        "heapMb": {
+          "type": "object",
+          "required": ["start", "peak", "end"],
+          "properties": {
+            "start": { "type": "number" }, "peak": { "type": "number" }, "end": { "type": "number" },
+            "slopeMbPerMin": { "type": "number", "description": "Linear-fit heap growth over the run (soak gate)." }
+          }
+        },
+        "rssMb": { "type": "number" }
+      }
+    },
+    "clients": {
+      "type": "object",
+      "required": ["bytesInPerS"],
+      "properties": {
+        "bytesInPerS": { "$ref": "#/$defs/dist", "description": "Wire bytes received per bot per second, incl. framing and schema patches." },
+        "bytesOutPerS": { "$ref": "#/$defs/dist" },
+        "rttMs": { "$ref": "#/$defs/dist" }
+      }
+    },
+    "consistency": {
+      "type": "object",
+      "description": "SC-008 checks run at the end of the test against server state and a sample of bot views.",
+      "properties": {
+        "duplicatePieces": { "type": "integer" },
+        "doubleFilledSlots": { "type": "integer" },
+        "nonCrewSnaps": { "type": "integer" },
+        "chatOutsideChannel": { "type": "integer", "description": "Chat events received by a bot outside the sender's nearby radius or crew." },
+        "divergentViews": { "type": "integer" }
+      }
+    },
+    "budgets": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["name", "limit", "actual", "pass"],
+        "properties": {
+          "name": { "type": "string", "examples": ["tickMs.avg", "tickMs.p99", "bytesInPerS.avg", "heapMb.peak", "ticksPerS.min"] },
+          "limit": { "type": "number" },
+          "actual": { "type": "number" },
+          "pass": { "type": "boolean" }
+        }
+      }
+    },
+    "pass": { "type": "boolean" }
+  },
+  "$defs": {
+    "dist": {
+      "type": "object",
+      "required": ["avg", "p99", "max"],
+      "properties": {
+        "avg": { "type": "number" }, "p50": { "type": "number" }, "p95": { "type": "number" },
+        "p99": { "type": "number" }, "max": { "type": "number" }, "min": { "type": "number" }
+      }
+    }
+  }
+}

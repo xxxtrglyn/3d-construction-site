@@ -1,0 +1,473 @@
+{
+  "version": 1,
+  "generatedAt": "2026-11-04T15:28:01.560Z",
+  "assets": [
+    {
+      "id": "worker",
+      "file": "worker.e00fb4b9.glb",
+      "bytes": 38028,
+      "sha256": "e00fb4b9ff9df0e35af2b12088aba37032f2edbbc40ca4e2462c7ae2b8134b44",
+      "group": "critical",
+      "nodes": [
+        "Arm_L",
+        "Arm_R",
+        "Body",
+        "Carry",
+        "Hand_R",
+        "Hat",
+        "Leg_L",
+        "Leg_R",
+        "Worker"
+      ]
+    },
+    {
+      "id": "pieces",
+      "file": "pieces.bb15262c.glb",
+      "bytes": 91368,
+      "sha256": "bb15262cc0a2a6f0961c7c0dac0d9e437c989be51f8232edb022580335e28567",
+      "group": "critical",
+      "nodes": [
+        "Piece_beam",
+        "Piece_bell",
+        "Piece_brick",
+        "Piece_cement",
+        "Piece_concrete",
+        "Piece_cone",
+        "Piece_decor",
+        "Piece_paint",
+        "Piece_panel",
+        "Pieces"
+      ]
+    },
+    {
+      "id": "lot",
+      "file": "lot.71c9b289.glb",
+      "bytes": 245960,
+      "sha256": "71c9b2890ca02982f893e4e321a04c0255fab9d235445037bd1e1c8e3499f021",
+      "group": "critical",
+      "nodes": [
+        "Lot",
+        "M_Crane",
+        "M_HighSlot_3_0",
+        "M_HighSlot_3_1",
+        "M_HighSlot_3_2",
+        "M_HighSlot_6_0",
+        "M_HookPad",
+        "M_Mixer",
+        "M_Mixer_Chute",
+        "M_Mixer_Hopper",
+        "M_Park_excavator",
+        "M_Park_forklift",
+        "M_Pit",
+        "M_Spoil",
+        "Rack_beam_Top",
+        "Rack_bell_Top",
+        "Rack_brick_Top",
+        "Rack_cement_Top",
+        "Rack_cone_Top",
+        "Rack_decor_Top",
+        "Rack_paint_Top",
+        "Rack_panel_Top",
+        "Spawn",
+        "TowerPlot"
+      ]
+    },
+    {
+      "id": "site",
+      "file": "site.cf04fba5.glb",
+      "bytes": 291484,
+      "sha256": "cf04fba5ef2350f5f9325458623c7e3627382dba7875a641986f82fec3ae2295",
+      "group": "critical",
+      "nodes": [
+        "Site"
+      ]
+    },
+    {
+      "id": "fx",
+      "file": "fx.e5a9889a.glb",
+      "bytes": 9048,
+      "sha256": "e5a9889ab45967982088d417cfcdb2473671a5c30533f4da9125aef013d41e78",
+      "group": "deferred",
+      "nodes": [
+        "Fx",
+        "Fx_confetti",
+        "Fx_puff",
+        "Fx_ray",
+        "Fx_sparkle"
+      ]
+    },
+    {
+      "id": "clock-tower-stage-0",
+      "file": "clock-tower-stage-0.503944c4.glb",
+      "bytes": 11704,
+      "sha256": "503944c4bf9db3fdac3438de5286a2c6b4121d5a49c6b413046279859f61aa2a",
+      "group": "critical",
+      "nodes": [
+        "BuildZone",
+        "ClockTower_Stage0",
+        "Sign_Stars"
+      ]
+    },
+    {
+      "id": "clock-tower-stage-1",
+      "file": "clock-tower-stage-1.50dee7f5.glb",
+      "bytes": 17380,
+      "sha256": "50dee7f54941dedc984661ee14f1a889e40fdcbe14109a3603a751724ac165fa",
+      "group": "critical",
+      "nodes": [
+        "BuildZone",
+        "ClockTower_Stage1",
+        "Sign_Stars"
+      ]
+    },
+    {
+      "id": "clock-tower-stage-2",
+      "file": "clock-tower-stage-2.8dfd1552.glb",
+      "bytes": 34348,
+      "sha256": "8dfd15526080086f39e8adc963a7f7a324a9f04e730fa171f0cf9b3149367cce",
+      "group": "deferred",
+      "nodes": [
+        "BuildZone",
+        "ClockTower_Stage2",
+        "Sign_Stars"
+      ]
+    },
+    {
+      "id": "clock-tower-stage-3",
+      "file": "clock-tower-stage-3.1539818c.glb",
+      "bytes": 96080,
+      "sha256": "1539818c09c9b457171271252aa8cd8789056a5fd12f6c7f692570ea1a9abe00",
+      "group": "deferred",
+      "nodes": [
+        "BuildZone",
+        "ClockTower_Stage3",
+        "Sign_Stars"
+      ]
+    },
+    {
+      "id": "clock-tower-stage-4",
+      "file": "clock-tower-stage-4.3659f068.glb",
+      "bytes": 131652,
+      "sha256": "3659f06877a3ef28e2b08c3ffdab1eaf49295d5a2dd1f7269c3aa2144afceb86",
+      "group": "deferred",
+      "nodes": [
+        "BuildZone",
+        "ClockTower_Stage4",
+        "Sign_Stars"
+      ]
+    },
+    {
+      "id": "clock-tower-stage-5",
+      "file": "clock-tower-stage-5.3f0d871f.glb",
+      "bytes": 296516,
+      "sha256": "3f0d871f733806d2504d0c75e8aad1be7b82e271f9c7443650952486311b9d52",
+      "group": "deferred",
+      "nodes": [
+        "BuildZone",
+        "ClockTower_Stage5",
+        "Sign_Stars"
+      ]
+    },
+    {
+      "id": "clock-tower-stage-6",
+      "file": "clock-tower-stage-6.fd7df269.glb",
+      "bytes": 471556,
+      "sha256": "fd7df2697242969fb95d21238995b7e62f7a7ee4ae1eb1ede229b3963a388c73",
+      "group": "deferred",
+      "nodes": [
+        "BuildZone",
+        "ClockTower_Stage6",
+        "Sign_Stars"
+      ]
+    },
+    {
+      "id": "pieces-lod1",
+      "file": "pieces-lod1.977d83c2.glb",
+      "bytes": 47248,
+      "sha256": "977d83c25e16250d1cd22b5888d82c4a3bba36fddea7bdeec8f5522e12f391e7",
+      "group": "critical",
+      "nodes": [
+        "Piece_beam",
+        "Piece_bell",
+        "Piece_brick",
+        "Piece_cement",
+        "Piece_concrete",
+        "Piece_cone",
+        "Piece_decor",
+        "Piece_paint",
+        "Piece_panel",
+        "Pieces"
+      ]
+    },
+    {
+      "id": "worker-lod1",
+      "file": "worker-lod1.82e427fe.glb",
+      "bytes": 15188,
+      "sha256": "82e427fe3f872026850974d0dab4caef320933fb1b92eafa7c41846da0eab266",
+      "group": "critical",
+      "nodes": [
+        "Arm_L",
+        "Arm_R",
+        "Body",
+        "Carry",
+        "Hand_R",
+        "Hat",
+        "Leg_L",
+        "Leg_R",
+        "Worker"
+      ]
+    },
+    {
+      "id": "foreman",
+      "file": "foreman.212a7fb5.glb",
+      "bytes": 45564,
+      "sha256": "212a7fb51719db230cad411a0aa1b401140e61f910512b714612628689170c95",
+      "group": "critical",
+      "nodes": [
+        "Arm_L",
+        "Arm_R",
+        "Body",
+        "Foreman",
+        "Head",
+        "Leg_L",
+        "Leg_R"
+      ]
+    },
+    {
+      "id": "props-mp",
+      "file": "props-mp.0b076708.glb",
+      "bytes": 20380,
+      "sha256": "0b0767087258e53b8d4ebc23a5f7e06277c6e303af202533e7702db469c61c67",
+      "group": "critical",
+      "nodes": [
+        "PlotSign",
+        "PlotSign_Face",
+        "PlotSign_Flag",
+        "PropsMP",
+        "SupplyBin",
+        "SupplyBin_Top"
+      ]
+    },
+    {
+      "id": "clock-tower-stage-1-merged",
+      "file": "clock-tower-stage-1-merged.698a89f4.glb",
+      "bytes": 13388,
+      "sha256": "698a89f40ec265d4dce91d30d5b589baedb390469a8176cdf0873bf07fdfc276",
+      "group": "deferred",
+      "nodes": [
+        "ClockTower_Stage1",
+        "Sign_Stars"
+      ]
+    },
+    {
+      "id": "clock-tower-lod1-1",
+      "file": "clock-tower-lod1-1.bae38bf0.glb",
+      "bytes": 13304,
+      "sha256": "bae38bf038eaa00f2f3f6b9aff91a6e46339308daa2bbf61c38b3e2610e7cf11",
+      "group": "critical",
+      "nodes": [
+        "ClockTower_Stage1"
+      ]
+    },
+    {
+      "id": "clock-tower-stage-2-merged",
+      "file": "clock-tower-stage-2-merged.f1bb526f.glb",
+      "bytes": 27280,
+      "sha256": "f1bb526f8a5963cf86e3bb66554a9bed16f2ee804a7c0437c0887bc9b1be1d15",
+      "group": "deferred",
+      "nodes": [
+        "ClockTower_Stage2",
+        "Sign_Stars"
+      ]
+    },
+    {
+      "id": "clock-tower-lod1-2",
+      "file": "clock-tower-lod1-2.af7119a0.glb",
+      "bytes": 25776,
+      "sha256": "af7119a0761736766429ca40e48d4c5a52f45ba2d478a3ddb51a3d8b0c516575",
+      "group": "critical",
+      "nodes": [
+        "ClockTower_Stage2"
+      ]
+    },
+    {
+      "id": "clock-tower-stage-3-merged",
+      "file": "clock-tower-stage-3-merged.803441ad.glb",
+      "bytes": 82176,
+      "sha256": "803441ad1bc7efae2ce27cc1013263a055a1b2cf0da4c4e059c1433b836c6447",
+      "group": "deferred",
+      "nodes": [
+        "ClockTower_Stage3",
+        "Sign_Stars"
+      ]
+    },
+    {
+      "id": "clock-tower-lod1-3",
+      "file": "clock-tower-lod1-3.fba1596b.glb",
+      "bytes": 22380,
+      "sha256": "fba1596b8012bee9c7581929c9cdb2817ddd81daf0631059433c2e121674381b",
+      "group": "critical",
+      "nodes": [
+        "ClockTower_Stage3"
+      ]
+    },
+    {
+      "id": "clock-tower-stage-4-merged",
+      "file": "clock-tower-stage-4-merged.79ae0868.glb",
+      "bytes": 117732,
+      "sha256": "79ae086813ab21f61cfb549d02a8987a60f5c211528b51db3cc1ed7986591a44",
+      "group": "deferred",
+      "nodes": [
+        "ClockTower_Stage4",
+        "Sign_Stars"
+      ]
+    },
+    {
+      "id": "clock-tower-lod1-4",
+      "file": "clock-tower-lod1-4.4b2f6792.glb",
+      "bytes": 25264,
+      "sha256": "4b2f6792b32a118c95eb8888fc0b6ca60bbae19d87c65dc0e4a74fc4c63e5bd3",
+      "group": "critical",
+      "nodes": [
+        "ClockTower_Stage4"
+      ]
+    },
+    {
+      "id": "clock-tower-stage-5-merged",
+      "file": "clock-tower-stage-5-merged.bfd27f81.glb",
+      "bytes": 209020,
+      "sha256": "bfd27f81d2eb417e9fb5cea5402aca23ab3d37c38debf73fcaa3de26f39f6529",
+      "group": "deferred",
+      "nodes": [
+        "ClockTower_Stage5",
+        "Sign_Stars"
+      ]
+    },
+    {
+      "id": "clock-tower-lod1-5",
+      "file": "clock-tower-lod1-5.e748c631.glb",
+      "bytes": 36168,
+      "sha256": "e748c631efdf5cc653be7ea6c463f98397fa05c899187f4687babcbb52854331",
+      "group": "critical",
+      "nodes": [
+        "ClockTower_Stage5"
+      ]
+    },
+    {
+      "id": "clock-tower-stage-6-merged",
+      "file": "clock-tower-stage-6-merged.455f6e7d.glb",
+      "bytes": 163784,
+      "sha256": "455f6e7da7725f2a10a9ffde56436f8e3d3c20a1d5296315a667c50cd16d8e15",
+      "group": "deferred",
+      "nodes": [
+        "ClockTower_Stage6",
+        "Sign_Stars"
+      ]
+    },
+    {
+      "id": "clock-tower-lod1-6",
+      "file": "clock-tower-lod1-6.68e6af18.glb",
+      "bytes": 29940,
+      "sha256": "68e6af1897b6ce511d144f7f816adaf03c26564d431e2e9e3560802f522f05f2",
+      "group": "critical",
+      "nodes": [
+        "ClockTower_Stage6"
+      ]
+    },
+    {
+      "id": "machine-crane",
+      "file": "machine-crane.876e285f.glb",
+      "bytes": 39548,
+      "sha256": "876e285fd431e27a78abe221a259312516c500790789bb5f13e8f63be9007966",
+      "group": "deferred",
+      "nodes": [
+        "Cab",
+        "Crane",
+        "Hook",
+        "Jib",
+        "Mast",
+        "Trolley"
+      ]
+    },
+    {
+      "id": "machine-crane-lod1",
+      "file": "machine-crane-lod1.3724e396.glb",
+      "bytes": 3336,
+      "sha256": "3724e39634ac6c6dfb35a908dce8e150e7e089996cd434104195d8793d894bde",
+      "group": "deferred",
+      "nodes": [
+        "Crane_LOD1"
+      ]
+    },
+    {
+      "id": "machine-excavator",
+      "file": "machine-excavator.760eed29.glb",
+      "bytes": 26924,
+      "sha256": "760eed29a4bd42b67df51f64f3dbbc3c3b0560bdd700dfe454974475d10e9526",
+      "group": "deferred",
+      "nodes": [
+        "Arm",
+        "Body",
+        "Boom",
+        "Bucket",
+        "Excavator"
+      ]
+    },
+    {
+      "id": "machine-excavator-lod1",
+      "file": "machine-excavator-lod1.17dff213.glb",
+      "bytes": 3912,
+      "sha256": "17dff213cea90b0aa89fb23af8c6553db49a67bdd8f64836aaea532cf68bc8d1",
+      "group": "deferred",
+      "nodes": [
+        "Excavator_LOD1"
+      ]
+    },
+    {
+      "id": "machine-forklift",
+      "file": "machine-forklift.2869cba6.glb",
+      "bytes": 19264,
+      "sha256": "2869cba6d8778a1f2d532009650db66e9c981800db7ce3a086d3483a17d1b798",
+      "group": "deferred",
+      "nodes": [
+        "Body",
+        "Forklift",
+        "Forks",
+        "Mast"
+      ]
+    },
+    {
+      "id": "machine-forklift-lod1",
+      "file": "machine-forklift-lod1.506995f4.glb",
+      "bytes": 5840,
+      "sha256": "506995f46ee460611588255f501e7acff2372fa0e7e4589b6290d16abbe58b82",
+      "group": "deferred",
+      "nodes": [
+        "Forklift_LOD1"
+      ]
+    },
+    {
+      "id": "machine-mixer",
+      "file": "machine-mixer.3c946105.glb",
+      "bytes": 14192,
+      "sha256": "3c94610577c107766a9b881c4ac6b5345bfbb94b959be66f7a9d3cf0b1516af0",
+      "group": "deferred",
+      "nodes": [
+        "Body",
+        "Chute",
+        "Drum",
+        "Mixer"
+      ]
+    },
+    {
+      "id": "machine-mixer-lod1",
+      "file": "machine-mixer-lod1.58c8328b.glb",
+      "bytes": 4916,
+      "sha256": "58c8328b234966e84c8c53d050f48a4611b518b52d971e414de370d4323d0861",
+      "group": "deferred",
+      "nodes": [
+        "Mixer_LOD1"
+      ]
+    }
+  ]
+}
