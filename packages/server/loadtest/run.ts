@@ -83,7 +83,14 @@ async function main(): Promise<void> {
     lastBytes = new Map(all.map((b, i) => [i, b.bytesIn]));
     const mem = server ? process.memoryUsage().heapUsed / 1048576 : 0;
     peakHeap = Math.max(peakHeap, mem);
-    if (s % 5 === 0) heap.push([now / 60, mem]);
+    // retained heap after a forced major GC (a sawtooth of lazy collection is not a leak)
+    if (server && s % 30 === 0 && s > WARMUP_S) {
+      const gc = (globalThis as { gc?: () => void }).gc;
+      if (gc) {
+        gc();
+        heap.push([now / 60, process.memoryUsage().heapUsed / 1048576]);
+      } else heap.push([now / 60, mem]);
+    }
     if (s % 30 === 0 || s === duration) {
       const w1 = server?.ctx.worlds.get(1);
       console.log(`[loadtest] t=${s}s bots=${all.filter((b) => b.connected).length} players=${w1?.sessions.size ?? '?'} tick p99=${w1 ? w1.metricsRef.tickMs.stats().p99.toFixed(2) : '?'}ms heap=${mem.toFixed(0)}MB`);
@@ -156,7 +163,7 @@ async function main(): Promise<void> {
     pass,
   };
   const file = writeReport(ROOT, report);
-  printSummary(rows, [['behaviors', JSON.stringify(behaviors)], ['bytes/bot/s (p95/max)', `${bytes.p95} / ${bytes.max}`], ['report', file]]);
+  printSummary(rows, [['retained heap MB (per 30 s)', heap.map(([, m]) => m.toFixed(1)).join(' ')], ['behaviors', JSON.stringify(behaviors)], ['bytes/bot/s (p95/max)', `${bytes.p95} / ${bytes.max}`], ['report', file]]);
   for (const w of workers) w.postMessage({ type: 'stop' });
   await sleep(1500);
   for (const w of workers) await w.terminate();

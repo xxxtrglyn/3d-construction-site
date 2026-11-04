@@ -8,7 +8,7 @@
     "dev": "HHT_METRICS=1 HHT_DEV_CHEATS=1 node --watch src/index.ts",
     "typecheck": "tsc -p tsconfig.json",
     "test": "vitest run",
-    "loadtest": "node loadtest/run.ts",
+    "loadtest": "node --expose-gc loadtest/run.ts",
     "reports": "node scripts/reports.ts"
   },
   "dependencies": {
