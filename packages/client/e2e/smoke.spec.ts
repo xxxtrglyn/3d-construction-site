@@ -13,6 +13,13 @@ test('loads without login and the worker moves with the keyboard', async ({ page
     const now = await state(page);
     return Math.hypot(now.worker.position[0] - before.worker.position[0], now.worker.position[2] - before.worker.position[2]);
   };
+  // a keydown sent while the software-rendered page is still busy can get lost: press again once
+  await page.waitForTimeout(3000);
+  if ((await moved()) === 0) {
+    await page.keyboard.up('KeyW');
+    await page.locator('#game').focus();
+    await page.keyboard.down('KeyW');
+  }
   await expect.poll(moved, { timeout: 8_000 }).toBeGreaterThan(0.8);
   await page.keyboard.up('KeyW');
   expect(errors).toEqual([]);

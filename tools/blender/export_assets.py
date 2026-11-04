@@ -39,7 +39,7 @@ def asset_specs():
              groups=[f'Piece_{p}' for p in PIECE_IDS], keep=['Pieces']),
         dict(id='lot', group='critical', build=lot.build, groups=['Lot'],
              keep=['Spawn', 'TowerPlot'] + [f'Rack_{p}_Top' for p in RACK_IDS + ['cone']]),
-        dict(id='site', group='critical', build=site.build, groups=['Site'], keep=['Site']),
+        dict(id='site', group='critical', build=site.build, groups=['Site'], keep=['Site'], vcol='site'),
         dict(id='fx', group='deferred', build=fx.build,
              groups=['Fx_puff', 'Fx_confetti', 'Fx_sparkle', 'Fx_ray'], keep=['Fx']),
     ]
@@ -47,18 +47,24 @@ def asset_specs():
         specs.append(dict(id=f'clock-tower-stage-{n}', group='critical' if n <= 1 else 'deferred',
                           build=(lambda n=n: clock_tower.build(n)), groups=[f'ClockTower_Stage{n}'],
                           keep=['Sign_Stars', 'BuildZone'], scale=clock_tower.TOWER_SCALE))
+    # feature 002: low-poly vertex-colored pieces for the multiplayer site (hundreds of instances)
+    specs.append(dict(id='pieces-lod1', group='critical', build=pieces.build,
+                      groups=[f'Piece_{p}' for p in PIECE_IDS], keep=['Pieces'], vcol='all', decimate=2100))
+    # feature 002: crowd worker (decimated, same parts/materials so the hat can be tinted per instance)
+    specs.append(dict(id='worker-lod1', group='critical', build=worker.build,
+                      groups=['Body', 'Hat', 'Arm_L', 'Arm_R', 'Leg_L', 'Leg_R'], keep=['Worker', 'Hand_R', 'Carry'], decimate=1000, vcol='crowd'))
     # feature 002: Foreman, plot props, and two tower LODs per stage for the 12-plot site (research R7)
     specs.append(dict(id='foreman', group='critical', build=foreman.build,
-                      groups=['Body', 'Head', 'Arm_L', 'Arm_R', 'Leg_L', 'Leg_R'], keep=['Foreman']))
+                      groups=['Body', 'Head', 'Arm_L', 'Arm_R', 'Leg_L', 'Leg_R'], keep=['Foreman'], vcol='keep-special'))
     specs.append(dict(id='props-mp', group='critical', build=props_mp.build, groups=['PlotSign', 'SupplyBin'],
-                      keep=['PropsMP', 'PlotSign_Face', 'PlotSign_Flag', 'SupplyBin_Top']))
+                      keep=['PropsMP', 'PlotSign_Face', 'PlotSign_Flag', 'SupplyBin_Top'], vcol='keep-special', decimate=900))
     for n in range(1, 7):
         # LOD0: toon colors baked to vertex colors → one toon mesh + brick + glows (≤ 15 draws with outlines)
         specs.append(dict(id=f'clock-tower-stage-{n}-merged', group='deferred', build=(lambda n=n: clock_tower.build(n)),
-                          groups=[f'ClockTower_Stage{n}'], keep=['Sign_Stars'], scale=clock_tower.TOWER_SCALE, vcol='keep-special'))
+                          groups=[f'ClockTower_Stage{n}'], keep=['Sign_Stars'], scale=clock_tower.TOWER_SCALE, vcol='keep-special', decimate=20000))
         # LOD1: everything in one vertex-colored mesh, decimated (1 draw, critical so far towers show at once)
         specs.append(dict(id=f'clock-tower-lod1-{n}', group='critical', build=(lambda n=n: clock_tower.build(n)),
-                          groups=[f'ClockTower_Stage{n}'], keep=[], scale=clock_tower.TOWER_SCALE, vcol='all', decimate=2800))
+                          groups=[f'ClockTower_Stage{n}'], keep=[], scale=clock_tower.TOWER_SCALE, vcol='all', decimate=2500))
     return specs
 
 
@@ -72,6 +78,14 @@ def _base_color(mat):
         return (c[0], c[1], c[2])
     c = bsdf.inputs['Base Color'].default_value
     return (c[0], c[1], c[2])
+
+
+# materials kept as-is per bake mode (everything else becomes the vertex-colored T_vcol)
+VCOL_KEEP = {
+    'keep-special': {'T_brickwall'},
+    'crowd': {'T_hat'},  # the hard hat is tinted per instance
+    'site': {'T_earth', 'T_grass', 'T_grass2', 'T_dirt', 'T_concrete', 'T_mound'},  # ground: no outlines/shadows
+}
 
 
 def bake_vertex_colors(mode):
@@ -89,7 +103,7 @@ def bake_vertex_colors(mode):
         if obj.type != 'MESH' or not obj.material_slots or not obj.material_slots[0].material:
             continue
         mat = obj.material_slots[0].material
-        if mode != 'all' and (mat.name.startswith('G_') or mat.name == 'T_brickwall'):
+        if mat.name in VCOL_KEEP.get(mode, set()) or (mode != 'all' and mat.name.startswith('G_')):
             continue
         col = _base_color(mat)
         if mat.name == 'T_brickwall':

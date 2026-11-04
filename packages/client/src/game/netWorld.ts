@@ -9,8 +9,10 @@ import { Celebration } from '../fx/celebration.ts';
 import { Puffs } from '../fx/puff.ts';
 import type { PieceView, PlotView, WorldView } from '../net/connection.ts';
 import { flagHtml } from '../ui/flags.ts';
+import { addOutline } from '../render/outline.ts';
 import { escapeHtml } from '../crowd/labels.ts';
 import type { PieceRenderer } from '../world/pieceRenderer.ts';
+import { RACK_DISPLAY } from '../world/layout.ts';
 
 const ON_Y = THREE.Object3D.DEFAULT_UP;
 /** LOD0 (merged) towers: at most this many, within this distance (research R7). */
@@ -20,6 +22,8 @@ const LABEL_DIST = 32;
 
 /** One plot's tower: stage-0 foundation, merged LOD0 when near, single-mesh LOD1 otherwise. */
 class TowerSlot {
+  /** set from the quality tier (low tier: no tower shadows) */
+  static shadows = true;
   readonly group = new THREE.Group();
   private shownKey = '';
   private obj: THREE.Object3D | null = null;
@@ -57,6 +61,14 @@ class TowerSlot {
     if (id) {
       const src = assets.get(id) as THREE.Object3D;
       this.obj = src.clone(true); // shares geometry and materials across plots
+      // shadows only from near (LOD0) towers on the high tier; far towers draw no outline hulls (research R7)
+      const cast = TowerSlot.shadows && (near || stage === 0);
+      const lod1 = id.startsWith('clock-tower-lod1-');
+      this.obj.traverse((o) => {
+        if (!(o as THREE.Mesh).isMesh) return;
+        if (o.userData.isOutline) o.visible = !lod1;
+        else o.castShadow = cast;
+      });
       this.group.add(this.obj);
     }
   }
@@ -91,7 +103,8 @@ export class NetWorld {
   private readonly sfx: Sfx;
   binTop = 0.16;
 
-  constructor(assets: AssetStore, hudRoot: HTMLElement, sfx: Sfx, particles: number) {
+  constructor(assets: AssetStore, hudRoot: HTMLElement, sfx: Sfx, particles: number, shadows = true) {
+    TowerSlot.shadows = shadows;
     this.assets = assets;
     this.hudRoot = hudRoot;
     this.sfx = sfx;
@@ -123,26 +136,37 @@ export class NetWorld {
     }
   }
 
+  /** One InstancedMesh per sub-mesh of a prop, placed at every plot (12 instances → a handful of draws). */
+  private instanceProp(node: THREE.Object3D, place: (d: PlotDef) => THREE.Matrix4): void {
+    node.updateMatrixWorld(true);
+    const inv = node.matrixWorld.clone().invert();
+    const m = new THREE.Matrix4();
+    node.traverse((o) => {
+      const mesh = o as THREE.Mesh;
+      if (!mesh.isMesh || mesh.userData.isOutline) return;
+      const local = inv.clone().multiply(mesh.matrixWorld);
+      const inst = new THREE.InstancedMesh(mesh.geometry, mesh.material, SITE.plots.length);
+      inst.castShadow = mesh.castShadow && TowerSlot.shadows;
+      inst.receiveShadow = true;
+      SITE.plots.forEach((d, i) => inst.setMatrixAt(i, m.multiplyMatrices(place(d), local)));
+      inst.instanceMatrix.needsUpdate = true;
+      inst.computeBoundingSphere();
+      if (mesh.children.some((c) => c.userData.isOutline)) addOutline(inst);
+      this.group.add(inst);
+    });
+  }
+
   private placeProps(): void {
     const props = this.assets.get('props-mp');
     const sign = props?.getObjectByName('PlotSign');
     const bin = props?.getObjectByName('SupplyBin');
     const binTop = props?.getObjectByName('SupplyBin_Top');
     if (binTop) this.binTop = binTop.position.y;
-    for (const d of SITE.plots) {
-      if (sign) {
-        const s = sign.clone(true);
-        s.position.set(d.sign.x, 0, d.sign.z);
-        s.rotation.set(0, d.yaw, 0);
-        this.group.add(s);
-      }
-      if (bin) {
-        const b = bin.clone(true);
-        b.position.set(d.bin.x, 0, d.bin.z);
-        b.rotation.set(0, d.yaw, 0);
-        this.group.add(b);
-      }
-    }
+    const q = new THREE.Quaternion();
+    const one = new THREE.Vector3(1, 1, 1);
+    const at = (x: number, z: number, yaw: number): THREE.Matrix4 => new THREE.Matrix4().compose(new THREE.Vector3(x, 0, z), q.setFromAxisAngle(ON_Y, yaw), one);
+    if (sign) this.instanceProp(sign, (d) => at(d.sign.x, d.sign.z, d.yaw));
+    if (bin) this.instanceProp(bin, (d) => at(d.bin.x, d.bin.z, d.yaw));
     const fa = this.assets.get('foreman');
     if (fa) {
       this.foreman = fa.clone(true);
@@ -300,4 +324,27 @@ function plotLabelHtml(i: number, p: PlotView, mine: boolean): string {
   const need = stage ? `<span class="dot" style="background:${PIECE_DOT[stage.pieceType] ?? '#ccc'}"></span>${PIECE_TYPES[stage.pieceType as PieceTypeId].label} ${p.filledSlots}/${stage.slotCount}` : '';
   const mode = p.joinMode === 'open' ? '🟢 Open' : p.joinMode === 'solo' ? '🔒 Solo' : '✋ Ask';
   return `<div class="tag${mine ? ' mine' : ''}">${flagHtml(i, 16)} 👑 ${host} ${starStr}</div><div class="tag sub">${need} · 👥 ${p.crewSize}/8 · ${mode}</div>`;
+}
+
+const rq = new THREE.Quaternion();
+const rm = new THREE.Matrix4();
+const rs = new THREE.Vector3(1, 1, 1);
+const rv = new THREE.Vector3();
+
+/** Display stacks on the 24 site racks (smaller than the solo lot's to keep the crowd budget). */
+export function drawRackDisplays(r: PieceRenderer): void {
+  for (const def of SITE.racks) {
+    const type = def.type;
+    const n = Math.min(type === 'cone' ? 3 : 2, RACK_DISPLAY[type]);
+    const hh = r.halfHeight.get(type) ?? 0.15;
+    rq.setFromAxisAngle(ON_Y, def.yaw);
+    for (let i = 0; i < n; i++) {
+      if (type === 'cone') rv.set(Math.cos(i * 2.1) * 0.35 * (i ? 1 : 0), hh, Math.sin(i * 2.1) * 0.35 * (i ? 1 : 0));
+      else if (type === 'beam') rv.set(0, hh + i * hh * 2.05, (i % 2) * 0.05);
+      else rv.set(i % 2 === 0 ? -0.33 : 0.33, hh, 0);
+      rv.applyQuaternion(rq).add(new THREE.Vector3(def.x, def.top, def.z));
+      rm.compose(rv, rq, rs);
+      r.add(type, rm);
+    }
+  }
 }

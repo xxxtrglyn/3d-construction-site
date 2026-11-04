@@ -18,7 +18,7 @@ if (debugMode) (window as unknown as { __hhtReady: Promise<void> }).__hhtReady =
 
 /** Assets only one boot mode needs (budgets.json → modes). */
 const SOLO_ONLY = new Set(['lot']);
-const NET_ONLY = (id: string): boolean => id === 'site' || id === 'foreman' || id === 'props-mp' || id.startsWith('clock-tower-lod1-');
+const NET_ONLY = (id: string): boolean => id === 'site' || id === 'foreman' || id === 'props-mp' || id === 'worker-lod1' || id === 'pieces-lod1' || id.startsWith('clock-tower-lod1-');
 
 interface Boot {
   loading: Loading;
@@ -112,6 +112,26 @@ async function bootCrowdPerf(b: Boot): Promise<void> {
     render: () => {
       const i = b.ctx.renderer.info;
       return { drawCalls: i.render.calls, triangles: i.render.triangles, textures: i.memory.textures, geometries: i.memory.geometries, frameMsMedian: scene.medianFrameMs() };
+    },
+    /** Per-group draw/triangle breakdown of visible meshes (perf investigations). */
+    breakdown: () => {
+      const out: Record<string, { meshes: number; tris: number; shadow: number }> = {};
+      b.ctx.scene.traverseVisible((o) => {
+        const m = o as import('three').Mesh;
+        if (!m.isMesh) return;
+        const inst = (m as import('three').InstancedMesh).isInstancedMesh ? (m as import('three').InstancedMesh).count : 1;
+        if (!inst) return;
+        const g = m.geometry;
+        const tris = ((g.index ? g.index.count : g.attributes.position!.count) / 3) * inst;
+        let top: import('three').Object3D = m;
+        while (top.parent && top.parent !== b.ctx.scene) top = top.parent;
+        const key = `${top.name || top.type}${m.userData.isOutline ? ':outline' : ''}`;
+        const e = (out[key] ??= { meshes: 0, tris: 0, shadow: 0 });
+        e.meshes++;
+        e.tris += tris;
+        if (m.castShadow) e.shadow += tris;
+      });
+      return out;
     },
   };
   (window as unknown as { __hht: typeof api; __hhtPerfReady: boolean }).__hht = api;

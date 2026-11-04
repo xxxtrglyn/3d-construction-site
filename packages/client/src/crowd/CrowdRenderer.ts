@@ -62,7 +62,7 @@ export class CrowdRenderer {
   private readonly s = new THREE.Vector3();
   private readonly carryOut = new THREE.Matrix4();
 
-  constructor(workerAsset: THREE.Object3D, capacity = 128, outlineDistance = 28) {
+  constructor(workerAsset: THREE.Object3D, capacity = 128, outlineDistance = 28, shadows = true) {
     this.group.name = 'Crowd';
     this.capacity = capacity;
     this.outlineDistance = outlineDistance;
@@ -86,7 +86,7 @@ export class CrowdRenderer {
         const inst = new THREE.InstancedMesh(mesh.geometry, name === 'Hat' ? hatMat : mesh.material, capacity);
         inst.name = `crowd:${name}:${mesh.name}`;
         inst.count = 0;
-        inst.castShadow = true;
+        inst.castShadow = shadows;
         inst.receiveShadow = true;
         inst.frustumCulled = false;
         inst.instanceMatrix.setUsage(THREE.DynamicDrawUsage);

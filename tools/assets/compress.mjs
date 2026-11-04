@@ -28,6 +28,25 @@ for (const f of readdirSync(OUT)) if (f.endsWith('.glb')) rmSync(join(OUT, f));
 const assets = [];
 for (const a of index.assets) {
   const doc = await io.read(join(RAW, a.file));
+  // Blender's merge can leave a blank white COLOR_0 next to the baked colors in COLOR_1 (vertex-color
+  // LODs, material T_vcol): keep only the baked set as COLOR_0.
+  for (const mesh of doc.getRoot().listMeshes()) {
+    for (const prim of mesh.listPrimitives()) {
+      const c1 = prim.getAttribute('COLOR_1');
+      if (!c1) continue;
+      const old = prim.getAttribute('COLOR_0');
+      // flat toon colors: 8 bits per channel is plenty (Blender wrote 16-bit)
+      const src = c1.getArray();
+      if (src instanceof Uint16Array) {
+        const u8 = new Uint8Array(src.length);
+        for (let i = 0; i < src.length; i++) u8[i] = src[i] >> 8;
+        c1.setArray(u8);
+      }
+      prim.setAttribute('COLOR_0', c1);
+      prim.setAttribute('COLOR_1', null);
+      if (old && old.listParents().length <= 1) old.dispose();
+    }
+  }
   // keep named contract nodes: prune must not remove empties the client depends on
   await doc.transform(
     dedup(),

@@ -531,3 +531,23 @@ inline.
 - **Packages**: the server uses `@colyseus/core` 0.18.23 plus `@colyseus/ws-transport`, not the
   `colyseus` meta-package (which pulls in redis, monitor and playground). Integration tests boot the
   real server in-process on port 0 rather than through `@colyseus/testing`.
+- **Crowd perf pass (`?perf=crowd`)**: the first measurement was 449 draw calls and 1.8 M triangles
+  on the high tier. Fixes:
+  - **Vertex-color baking per rigid part** for the crowd worker (`worker-lod1`, about 1,000 tris;
+    the hat stays a separate tintable material), the Foreman, the plot props, the site scenery
+    (ground materials stay separate so they keep no outlines and no shadows) and the multiplayer
+    pieces (`pieces-lod1`).
+  - **Instancing**: the 12 plot signs and bins are instanced.
+  - **Tower LODs**: near merged towers are decimated to about 20 k tris; far LOD1 towers cast no
+    shadows and draw no outline hulls.
+  - **Crowd outlines** only within 15 m; **no crowd, piece or tower shadows** on the low tier.
+  - **Rack displays**: 2 display pieces per rack on the 24-rack site.
+
+  Result, with the racks included:
+
+  | Tier | Draw calls | Triangles |
+  |---|---|---|
+  | high | 128 | 580 k |
+  | low | 56 | 245 k |
+
+  The pipeline promotes Blender's baked `COLOR_1` to `COLOR_0` (the merge left a blank `COLOR_0`).

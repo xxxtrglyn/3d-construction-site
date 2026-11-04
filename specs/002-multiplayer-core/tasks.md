@@ -634,14 +634,14 @@ busy-wait into the tick and confirm it fails, naming `tickMs.p99`.
   - **consistency checks at the end**: duplicate pieces, double-filled slots, non-crew snaps, divergent views (compare a sample of bot schema views with the server), chat outside its channel;
   - **output**: `reports/loadtest/<ts>.json` per `contracts/loadtest-report.schema.json`, asserting against `tools/assets/budgets.json → net`, with a non-zero exit on failure and a readable summary table.
 - [X] T118 [US7] Add a `--inject-tick-ms <n>` dev flag in `packages/server/src/rooms/WorldRoom.ts`, used only by `pnpm loadtest --selftest` to verify that a failing budget is detected.
-- [ ] T119 [P] [US7] Implement the `?perf=crowd` scene in `packages/client/src/debug/perfScene.ts`:
+- [X] T119 [P] [US7] Implement the `?perf=crowd` scene in `packages/client/src/debug/perfScene.ts`:
   - 100 synthetic workers fed through the real `net/interpolation.ts` and `crowd/` renderers, with mixed carries, emotes and nameplates;
   - 12 towers at mixed stages including 4 Masterpieces via `towerLod.ts`;
   - 1 looping celebration;
   - camera at the plaza hero angle;
   - no server needed.
-- [ ] T120 [US7] Extend `packages/client/e2e/perf.spec.ts` with `@perf` crowd tests on the high and low tiers, asserting `render.crowd` budgets (≤ 300 / ≤ 200 draw calls, ≤ 600 k / ≤ 300 k triangles) and recording the median frame ms.
-- [ ] T121 [US7] Run `pnpm loadtest` (full, 300 s) and fix any budget breach until it passes. Typical suspects:
+- [X] T120 [US7] Extend `packages/client/e2e/perf.spec.ts` with `@perf` crowd tests on the high and low tiers, asserting `render.crowd` budgets (≤ 300 / ≤ 200 draw calls, ≤ 600 k / ≤ 300 k triangles) and recording the median frame ms.
+- [X] T121 [US7] Run `pnpm loadtest` (full, 300 s) and fix any budget breach until it passes. Typical suspects:
   - allocations in snapshot encoding (pooled buffers);
   - schema churn;
   - SQLite in hot paths.

@@ -29,7 +29,9 @@
     "clock-tower-lod1-5": 40000,
     "clock-tower-stage-5-merged": 600000,
     "clock-tower-lod1-6": 40000,
-    "clock-tower-stage-6-merged": 600000
+    "clock-tower-stage-6-merged": 600000,
+    "worker-lod1": 80000,
+    "pieces-lod1": 60000
   },
   "render": {
     "high": {
@@ -70,7 +72,9 @@
         "clock-tower-lod1-3",
         "clock-tower-lod1-4",
         "clock-tower-lod1-5",
-        "clock-tower-lod1-6"
+        "clock-tower-lod1-6",
+        "worker-lod1",
+        "pieces-lod1"
       ],
       "excludeChunks": [
         "^NetGame-",

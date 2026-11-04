@@ -25,10 +25,10 @@ import type { QualitySettings } from '../render/quality.ts';
 import type { RenderContext } from '../render/renderer.ts';
 import { NetHud } from '../ui/netHud.ts';
 import { showModal, type ModalHandle } from '../ui/screens.ts';
-import { RACK_DISPLAY } from '../world/layout.ts';
 import { PieceRenderer } from '../world/pieceRenderer.ts';
 import { SiteView } from '../world/site.ts';
 import { GameShell } from './GameShell.ts';
+import { drawRackDisplays } from './netWorld.ts';
 
 const POSE_OF_ANIM: Record<number, CrowdPose> = { 0: 'idle', 1: 'walk', 2: 'run', 3: 'air', 4: 'cheer', 5: 'wave' };
 
@@ -105,9 +105,10 @@ export class NetGame extends GameShell {
     const prof = this.profile.get();
     this.worker = new WorkerView(this.assets.get('worker') as THREE.Group, HAT_COLORS[prof.hatColor]);
     scene.add(this.worker.root);
-    this.crowd = new CrowdRenderer(this.assets.get('worker') as THREE.Object3D, 128, this.quality.outlines ? this.quality.outlineDistance : 0);
+    this.crowd = new CrowdRenderer((this.assets.get('worker-lod1') ?? this.assets.get('worker')) as THREE.Object3D, 128, this.quality.outlines ? Math.min(15, this.quality.outlineDistance) : 0, this.quality.tier === 'high');
     scene.add(this.crowd.group);
-    this.pieceRenderer = new PieceRenderer(this.assets.get('pieces') as THREE.Group, 360);
+    this.pieceRenderer = new PieceRenderer((this.assets.get('pieces-lod1') ?? this.assets.get('pieces')) as THREE.Group, 360);
+    if (this.quality.tier !== 'high') this.pieceRenderer.group.traverse((o) => (o.castShadow = false));
     setCarryHalfHeights(this.pieceRenderer.halfHeight);
     scene.add(this.pieceRenderer.group);
     this.camera = new FollowCamera(camera);
@@ -419,26 +420,7 @@ export class NetGame extends GameShell {
   }
 
   private drawRacks(): void {
-    const r = this.pieceRenderer;
-    const m = this.tmpM;
-    const q = this.tmpQ;
-    const s = this.tmpS.set(1, 1, 1);
-    for (const rack of this.site.racks) {
-      const type = rack.def.type;
-      const n = RACK_DISPLAY[type];
-      const hh = r.halfHeight.get(type) ?? 0.15;
-      q.setFromAxisAngle(THREE.Object3D.DEFAULT_UP, rack.def.yaw);
-      for (let i = 0; i < n; i++) {
-        const local = type === 'cone'
-          ? new THREE.Vector3(Math.cos(i * 1.3) * 0.35 * (i ? 1 : 0), hh, Math.sin(i * 1.3) * 0.35 * (i ? 1 : 0))
-          : type === 'beam'
-            ? new THREE.Vector3(0, hh + i * hh * 2.05, (i % 2) * 0.05)
-            : new THREE.Vector3(i % 2 === 0 ? -0.33 : 0.33, hh + Math.floor(i / 2) * hh * 2.05, 0);
-        local.applyQuaternion(q).add(rack.top);
-        m.compose(local, q, s);
-        r.add(type, m);
-      }
-    }
+    drawRackDisplays(this.pieceRenderer);
   }
 
   /** The 32 m shadow frustum follows the player across the 70 m site. */

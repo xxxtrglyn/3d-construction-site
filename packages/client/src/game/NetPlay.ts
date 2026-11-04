@@ -52,7 +52,7 @@ export class NetPlay extends NetGame {
   private readonly v = new THREE.Vector3();
 
   override async build(): Promise<void> {
-    this.world = new NetWorld(this.assets, this.hudRoot, this.sfx, this.quality.particles);
+    this.world = new NetWorld(this.assets, this.hudRoot, this.sfx, this.quality.particles, this.quality.tier === 'high');
     this.ctx.scene.add(this.world.group);
     const send = <K extends Parameters<NetConnection['send']>[0]>(t: K, p: Parameters<NetConnection['send']>[1]) => this.conn.send(t, p as never);
     this.foremanDialog = new ForemanDialog(this.hudRoot, {

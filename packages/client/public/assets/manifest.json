@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-11-04T07:15:42.388Z",
+  "generatedAt": "2026-11-04T08:45:29.858Z",
   "assets": [
     {
       "id": "worker",
@@ -58,9 +58,9 @@
     },
     {
       "id": "site",
-      "file": "site.0a231bb5.glb",
-      "bytes": 309080,
-      "sha256": "0a231bb5d48355b544548370a8aece8dd5242dbc9db58104bfcb328a1ee8efc7",
+      "file": "site.371a0f64.glb",
+      "bytes": 288496,
+      "sha256": "371a0f64b4f02df927cec12a7293b857fc688a231a7a965b97029207793e532a",
       "group": "critical",
       "nodes": [
         "Site"
@@ -165,10 +165,45 @@
       ]
     },
     {
+      "id": "pieces-lod1",
+      "file": "pieces-lod1.91dc54df.glb",
+      "bytes": 44704,
+      "sha256": "91dc54df9da2dbd15bfe283b657c1da4ed7982feb919a9c181e420d5eb9ba466",
+      "group": "critical",
+      "nodes": [
+        "Piece_beam",
+        "Piece_bell",
+        "Piece_brick",
+        "Piece_cone",
+        "Piece_decor",
+        "Piece_paint",
+        "Piece_panel",
+        "Pieces"
+      ]
+    },
+    {
+      "id": "worker-lod1",
+      "file": "worker-lod1.b579d85b.glb",
+      "bytes": 15068,
+      "sha256": "b579d85b2f767f11f069262c10b24240ce5f0f7e01a41946e560adee1deda653",
+      "group": "critical",
+      "nodes": [
+        "Arm_L",
+        "Arm_R",
+        "Body",
+        "Carry",
+        "Hand_R",
+        "Hat",
+        "Leg_L",
+        "Leg_R",
+        "Worker"
+      ]
+    },
+    {
       "id": "foreman",
-      "file": "foreman.71164b62.glb",
-      "bytes": 62088,
-      "sha256": "71164b62a38708f1e5d661ff5eb7a70ddbd3999d24772902971870fc19e73be9",
+      "file": "foreman.95ff279c.glb",
+      "bytes": 45656,
+      "sha256": "95ff279cac259e7774251f813ed04d6f7d8db98af5fb4d98f1c5b03fba319eca",
       "group": "critical",
       "nodes": [
         "Arm_L",
@@ -182,9 +217,9 @@
     },
     {
       "id": "props-mp",
-      "file": "props-mp.4915b3c3.glb",
-      "bytes": 40252,
-      "sha256": "4915b3c38e46a963c62bfc9faede581b4e16204031bf66e01f5db6968e9b4635",
+      "file": "props-mp.8cf468df.glb",
+      "bytes": 20372,
+      "sha256": "8cf468dfc0e9c95097c721f2f01d2f8503b3c7744e4f87c4c308d1c9adf70a50",
       "group": "critical",
       "nodes": [
         "PlotSign",
@@ -197,9 +232,9 @@
     },
     {
       "id": "clock-tower-stage-1-merged",
-      "file": "clock-tower-stage-1-merged.b218f656.glb",
-      "bytes": 13320,
-      "sha256": "b218f656a14d81f44642ecca518acedd13847cfba29e05158aa43c1df8bab916",
+      "file": "clock-tower-stage-1-merged.698a89f4.glb",
+      "bytes": 13388,
+      "sha256": "698a89f40ec265d4dce91d30d5b589baedb390469a8176cdf0873bf07fdfc276",
       "group": "deferred",
       "nodes": [
         "ClockTower_Stage1",
@@ -208,9 +243,9 @@
     },
     {
       "id": "clock-tower-lod1-1",
-      "file": "clock-tower-lod1-1.a6b2b986.glb",
-      "bytes": 13236,
-      "sha256": "a6b2b986da19794e23ff7770c2f17a3e0341292915c8c7e13a3fabaef7082e9f",
+      "file": "clock-tower-lod1-1.bae38bf0.glb",
+      "bytes": 13304,
+      "sha256": "bae38bf038eaa00f2f3f6b9aff91a6e46339308daa2bbf61c38b3e2610e7cf11",
       "group": "critical",
       "nodes": [
         "ClockTower_Stage1"
@@ -218,9 +253,9 @@
     },
     {
       "id": "clock-tower-stage-2-merged",
-      "file": "clock-tower-stage-2-merged.0c901ae3.glb",
-      "bytes": 27132,
-      "sha256": "0c901ae3c7e551b7b85d47858084f1bba117cfdcfbf344babfed7ac82d48783f",
+      "file": "clock-tower-stage-2-merged.f1bb526f.glb",
+      "bytes": 27280,
+      "sha256": "f1bb526f8a5963cf86e3bb66554a9bed16f2ee804a7c0437c0887bc9b1be1d15",
       "group": "deferred",
       "nodes": [
         "ClockTower_Stage2",
@@ -229,9 +264,9 @@
     },
     {
       "id": "clock-tower-lod1-2",
-      "file": "clock-tower-lod1-2.bd1e2100.glb",
-      "bytes": 25616,
-      "sha256": "bd1e2100fd147f0d5901b7e7366ebdbe539f0852e886ae8369db4e3d05ec9e3f",
+      "file": "clock-tower-lod1-2.af7119a0.glb",
+      "bytes": 25776,
+      "sha256": "af7119a0761736766429ca40e48d4c5a52f45ba2d478a3ddb51a3d8b0c516575",
       "group": "critical",
       "nodes": [
         "ClockTower_Stage2"
@@ -239,9 +274,9 @@
     },
     {
       "id": "clock-tower-stage-3-merged",
-      "file": "clock-tower-stage-3-merged.46bf2106.glb",
-      "bytes": 82128,
-      "sha256": "46bf2106ea706571223f3a05e2ca534047191f6e3fee6b44bb7b214b37af34b5",
+      "file": "clock-tower-stage-3-merged.aed52fb0.glb",
+      "bytes": 82420,
+      "sha256": "aed52fb064fee651a937c7c0437d8145e158b24ed439ecb468bb9c4c61f87f21",
       "group": "deferred",
       "nodes": [
         "ClockTower_Stage3",
@@ -250,9 +285,9 @@
     },
     {
       "id": "clock-tower-lod1-3",
-      "file": "clock-tower-lod1-3.7f831cc1.glb",
-      "bytes": 23984,
-      "sha256": "7f831cc107a622dc5dcfd99cd3b613beb46ebd92d7eed74b2a68376ec4789f0b",
+      "file": "clock-tower-lod1-3.5291113f.glb",
+      "bytes": 22388,
+      "sha256": "5291113fa472989dd18ae25c1c2aa08cf706c36afb897d4eb7f537cef784f238",
       "group": "critical",
       "nodes": [
         "ClockTower_Stage3"
@@ -260,9 +295,9 @@
     },
     {
       "id": "clock-tower-stage-4-merged",
-      "file": "clock-tower-stage-4-merged.3c6b62a5.glb",
-      "bytes": 117556,
-      "sha256": "3c6b62a527b2cde6104343b19c33b72ccdf34de5fbcb0aa3bbb85b56de0a802b",
+      "file": "clock-tower-stage-4-merged.57b7becf.glb",
+      "bytes": 117912,
+      "sha256": "57b7becfcfb68c97b75397133a745a4af53da09343b71d0d4ae42b1c9d6723bf",
       "group": "deferred",
       "nodes": [
         "ClockTower_Stage4",
@@ -271,9 +306,9 @@
     },
     {
       "id": "clock-tower-lod1-4",
-      "file": "clock-tower-lod1-4.ad3b21e8.glb",
-      "bytes": 26860,
-      "sha256": "ad3b21e82b8af5868c984cabe8e447d00b4e6f7dc08d28104a1f755872d6ad92",
+      "file": "clock-tower-lod1-4.f2afc2b6.glb",
+      "bytes": 25264,
+      "sha256": "f2afc2b68509c5c8d575ef0b8a2daa2b3b55d4e7a291796713a0bc50196329e8",
       "group": "critical",
       "nodes": [
         "ClockTower_Stage4"
@@ -281,9 +316,9 @@
     },
     {
       "id": "clock-tower-stage-5-merged",
-      "file": "clock-tower-stage-5-merged.0b42b63c.glb",
-      "bytes": 276068,
-      "sha256": "0b42b63ceeb916295229190bff572c340fad67b32c7adbccf5f22d2f7d3e4450",
+      "file": "clock-tower-stage-5-merged.fd17e69b.glb",
+      "bytes": 208916,
+      "sha256": "fd17e69b4277e84b541d047fc7250a950a1a2875beafd5fc1f0a779c9311d06b",
       "group": "deferred",
       "nodes": [
         "ClockTower_Stage5",
@@ -292,9 +327,9 @@
     },
     {
       "id": "clock-tower-lod1-5",
-      "file": "clock-tower-lod1-5.04a84383.glb",
-      "bytes": 39072,
-      "sha256": "04a84383964595bdabceb3b876e71163e93e08a3cf6adabfcf4f50009ef16d55",
+      "file": "clock-tower-lod1-5.6918bc92.glb",
+      "bytes": 36148,
+      "sha256": "6918bc92b04b6661cbe6d55f11a85c5f6214811595b4d46330b999a94091ad43",
       "group": "critical",
       "nodes": [
         "ClockTower_Stage5"
@@ -302,9 +337,9 @@
     },
     {
       "id": "clock-tower-stage-6-merged",
-      "file": "clock-tower-stage-6-merged.a7999642.glb",
-      "bytes": 453048,
-      "sha256": "a7999642aa15970382f56dd82946abd1f29fa52e7ba011782f2bdffe29020491",
+      "file": "clock-tower-stage-6-merged.5a6987cb.glb",
+      "bytes": 163764,
+      "sha256": "5a6987cb647cac5f91b773598484bc0bfbbb08ae6a1280545716198d8415873f",
       "group": "deferred",
       "nodes": [
         "ClockTower_Stage6",
@@ -313,9 +348,9 @@
     },
     {
       "id": "clock-tower-lod1-6",
-      "file": "clock-tower-lod1-6.8c19e795.glb",
-      "bytes": 30748,
-      "sha256": "8c19e795da34f12817814d0ec35d4d3fc0d47e57a5ce3fb29aaed32f169abf60",
+      "file": "clock-tower-lod1-6.b77618c2.glb",
+      "bytes": 30032,
+      "sha256": "b77618c20fdec25e2283edca4968f0bbfe28605d56f5d96dedb0a3be757a5750",
       "group": "critical",
       "nodes": [
         "ClockTower_Stage6"
