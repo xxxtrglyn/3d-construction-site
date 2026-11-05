@@ -9,7 +9,7 @@ import { execSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { Worker } from 'node:worker_threads';
-import { blueprintById, isBlueprintId } from '@hht/shared';
+import { SITE, blueprintById, isBlueprintId, machineId } from '@hht/shared';
 import { loadConfig } from '../src/config.ts';
 import { startServer, type RunningServer } from '../src/server.ts';
 import type { BotStats } from './bot.ts';
@@ -106,7 +106,17 @@ async function main(): Promise<void> {
         const key = `${p.state}:${p.completedStages}:${p.filledA}:${p.filledB}:${p.highFilled}:${p.groundDug}:${p.groundPoured}`;
         const prev = lastProgress.get(i);
         if (!prev || prev.key !== key) lastProgress.set(i, { key, at: now });
-        else if (p.state === 'building' && p.crewSize > 0 && now - prev.at > STALL_S) stalled.add(i);
+        else if (p.state === 'building' && p.crewSize > 0 && now - prev.at > STALL_S && !stalled.has(i)) {
+          stalled.add(i);
+          const sp = SITE.machines[i]!;
+          const near = (x: number, z: number, r: number) => [...ws.systems.pieces.values()].filter((q) => Math.hypot(q.x - x, q.z - z) <= r).map((q) => `${q.type}/${q.state}`);
+          const d = SITE.plots[i]!;
+          const crane = ws.systems.machines.recs[machineId(i, 'crane')];
+          const fork = ws.systems.machines.recs[machineId(i, 'forklift')];
+          console.log(`[loadtest] stalled plot ${i} since t=${prev.at.toFixed(0)}s: state:stage:A:B:high:dug:poured = ${key}, crew ${p.crewSize}`);
+          console.log(`    pad: ${near(sp.hookPad.x, sp.hookPad.z, 3.2).join(' ') || '-'} | zone±3: ${near(d.x, d.z, d.buildZoneRadius + 3).join(' ') || '-'} | bin: ${Array.from(p.bin).join(',') || '-'}`);
+          console.log(`    crane op=${crane?.operator || '-'} phase=${crane?.state.phase} load=${JSON.stringify(crane?.state.load)} | fork op=${fork?.operator || '-'} load=${JSON.stringify(fork?.state.load)}`);
+        }
       });
     }
     if (s % 30 === 0 || s === duration) {

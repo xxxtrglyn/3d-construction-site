@@ -193,6 +193,9 @@ describe('phases', () => {
     expect(turned).toBeCloseTo(-MACHINE.forklift.pivotRate, 1); // 1 s of D: −1.6 rad, clockwise like steering right
     const left = run(s, ctx, hold(60, -127, 0)).at(-1)!;
     expect(Math.atan2(Math.sin(left.yaw - s.yaw), Math.cos(left.yaw - s.yaw))).toBeCloseTo(MACHINE.forklift.pivotRate, 1);
+    // with throttle held there is no pivot: from standstill W+D starts as a car (no yaw on the first step)
+    const wd = stepMachine(s, input(127, 127), SIM_DT, ctx).state;
+    expect(Math.abs(Math.atan2(Math.sin(wd.yaw - s.yaw), Math.cos(wd.yaw - s.yaw)))).toBeLessThan(0.01);
     // at full speed the turn is plain car steering (no extra pivot)
     const fast = { ...s, p3: MACHINE.forklift.speed };
     const one = stepMachine(fast, input(127, 127), SIM_DT, ctx).state;

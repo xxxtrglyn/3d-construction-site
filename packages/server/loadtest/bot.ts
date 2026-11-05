@@ -358,6 +358,17 @@ export class Bot {
     }
     const plots = this.state.plots;
     const mine = this.myPlot();
+    if (process.env.HHT_DEBUG_STALL && mine >= 0) {
+      const pv = plots[mine];
+      const key = pv ? `${pv.completedStages}:${pv.filledA}:${pv.filledB}:${pv.highFilled}` : '';
+      if (key !== this.dbgKey) {
+        this.dbgKey = key;
+        this.dbgSince = now;
+      } else if (now - this.dbgSince > 100_000 && now - this.dbgLast > 10_000 && pv?.state === 'building') {
+        this.dbgLast = now;
+        console.log(`[stall ${this.id}] plot=${mine} key=${key} mode=${this.mode} want=${this.wantType} carry=${this.own.carrying} drop=${this.dropTo} machine=${this.ownMachine?.id ?? '-'} job=${this.job?.kind ?? '-'} target=${this.target.x.toFixed(1)},${this.target.z.toFixed(1)} pos=${this.own.x.toFixed(1)},${this.own.z.toFixed(1)}`);
+      }
+    }
     if (this.ownMachine) return this.operate(now);
     if (this.mode !== 'idle' && now - this.modeSince > 45_000) {
       this.job = null;
@@ -495,6 +506,10 @@ export class Bot {
         return;
     }
   }
+
+  private dbgKey = '';
+  private dbgSince = 0;
+  private dbgLast = 0;
 
   private setModeKeep(m: Mode): void {
     const t = this.targetPlot;

@@ -13,7 +13,9 @@ the implementation.
 - [ ] Load test: `stalledTowers == 0`, towers per shift ≥ 003 baseline, per-client bandwidth and tick
       within budget (SC-005, SC-006)
 - [ ] No piece silently consumed in e2e and load tests (SC-007)
-- [ ] Owner approves the stage renders with second-material details (FR-024)
+- [x] Owner approves the stage renders with second-material details (FR-024)
+  - **2026-11-05: approved by the owner** (`assets/renders/clock-tower-stages-004.png`: brick footings,
+    steel lintels, steel roof collar, teal shutters, purple paint band, pink weathervane).
 - [ ] Solo tower time with machines ≤ 110 % of the 003 time (SC-004)
 - [ ] Playtest (5 people): ≥ 4 read their plot's needs within 5 s (SC-001); < 10 % refused deliveries
       after stage 2 (SC-002); 4-person crew: ≥ 3 of 6 stages with parallel work on different

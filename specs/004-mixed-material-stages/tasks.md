@@ -255,7 +255,7 @@ behaviour, and the new `clock-tower` recipe is live.
 
 ## Phase 8: Polish & Cross-Cutting Concerns
 
-- [ ] T054 [P] Stage art (research R11, FR-024): in `tools/blender/builders/clock_tower.py`, add second-material details per stage with the existing helpers:
+- [X] T054 [P] Stage art (research R11, FR-024): in `tools/blender/builders/clock_tower.py`, add second-material details per stage with the existing helpers:
   - Frame: brick footings at the 4 columns;
   - Walls: beam lintels;
   - Roof: beam ridge pole;

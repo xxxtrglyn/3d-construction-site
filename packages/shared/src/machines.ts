@@ -434,8 +434,9 @@ function stepForklift(s: MachineState, input: MoveInput, dt: number, ctx: Machin
   const braking = (p3 > 0 && want < p3) || (p3 < 0 && want > p3);
   p3 = approach(p3, want, (braking ? FORK_BRAKE : FORK_ACCEL) * dt);
   p2 = -axis(input.dx) * F.steerMax;
-  // car steering while rolling, plus a turn on the spot when slow or stopped (A/D alone must turn it)
-  const pivot = -axis(input.dx) * F.pivotRate * Math.max(0, 1 - Math.abs(p3) / FORK_PIVOT_FADE);
+  // car steering while rolling; A/D alone (no throttle) also turns it on the spot when slow or stopped.
+  // With W/S held it is a pure car again, so reversing out of a spot keeps car steering.
+  const pivot = input.dz === 0 ? -axis(input.dx) * F.pivotRate * Math.max(0, 1 - Math.abs(p3) / FORK_PIVOT_FADE) : 0;
   yaw = wrapAngle(yaw + ((p3 * p2) / FORK_WHEELBASE + pivot) * dt);
   const fx = dsin(yaw);
   const fz = dcos(yaw);

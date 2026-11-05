@@ -83,11 +83,18 @@ export function craneGoal(s: MachineState, plot: number, progress: TowerProgress
       const t = snapTarget(h, best.type, slots);
       return { kind: 'release', x: best.x, z: best.z, snap: !!t };
     }
-    return { kind: 'release', x: spots.hookPad.x, z: spots.hookPad.z, snap: false };
+    // nothing to fill with this piece: set it down off the pad (beyond the grab area) so the crane never loops on it
+    const d = SITE.plots[plot]!;
+    const ox = spots.hookPad.x - d.x;
+    const oz = spots.hookPad.z - d.z;
+    const l = Math.hypot(ox, oz) || 1;
+    return { kind: 'release', x: spots.hookPad.x + (ox / l) * 3.6, z: spots.hookPad.z + (oz / l) * 3.6, snap: false };
   }
   const R2 = 3.2 * 3.2;
+  // feature 004: only pieces the stage still has a slot for (a leftover beam on the pad must not loop the crane)
+  const useful = new Set<string>(openSlotRefs(SITE.plots[plot]!, spots, progress).map((x) => x.type));
   const near = loose
-    .filter((p) => (p.x - spots.hookPad.x) ** 2 + (p.z - spots.hookPad.z) ** 2 < R2)
+    .filter((p) => useful.has(p.type) && (p.x - spots.hookPad.x) ** 2 + (p.z - spots.hookPad.z) ** 2 < R2)
     .sort((a, b) => (a.x - spots.hookPad.x) ** 2 + (a.z - spots.hookPad.z) ** 2 - ((b.x - spots.hookPad.x) ** 2 + (b.z - spots.hookPad.z) ** 2))[0];
   return near ? { kind: 'grab', x: near.x, z: near.z } : null;
 }
