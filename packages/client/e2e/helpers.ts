@@ -2,7 +2,7 @@ import { expect, type Page } from '@playwright/test';
 
 export interface HhtState {
   worker: { position: [number, number, number]; grounded: boolean; holding: string | null };
-  tower: { completedStages: number; filledSlots: number; stars: number; isMasterpiece: boolean };
+  tower: { completedStages: number; filledSlots: number; filled: number[]; needs: Array<{ type: string; left: number; done: boolean; craneOnly: boolean }>; ghosts: Record<string, number>; stars: number; isMasterpiece: boolean };
   loosePieces: number;
   profile: { name: string; hatColor: string; muted: boolean };
 }

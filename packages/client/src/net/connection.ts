@@ -1,5 +1,5 @@
 import { Client, type Room } from '@colyseus/sdk';
-import { CLOCK_TOWER, decodeSnapshot, type ClientMessageType, type ClientMessages, type ServerEvents, type Snapshot, type TowerProgress } from '@hht/shared';
+import { CLOCK_TOWER, blueprintById, decodeSnapshot, isBlueprintId, type ClientMessageType, type ClientMessages, type ServerEvents, type Snapshot, type TowerProgress } from '@hht/shared';
 import { ServerClock } from './clock.ts';
 import type { Matchmade } from './matchmake.ts';
 
@@ -19,7 +19,9 @@ export interface PlotView {
   state: string;
   blueprintId: string;
   completedStages: number;
-  filledSlots: number;
+  /** feature 004: filled slots per recipe item of the current stage */
+  filledA: number;
+  filledB: number;
   hostName: string;
   hostSession: string;
   joinMode: string;
@@ -39,7 +41,14 @@ export interface PlotView {
 
 /** The plot's tower progress as the shared rules see it. */
 export function progressOf(p: PlotView): TowerProgress {
-  return { blueprintId: CLOCK_TOWER.id, completedStages: p.completedStages, filledSlots: p.filledSlots, groundDug: p.groundDug ?? 0, groundPoured: p.groundPoured ?? 0, highFilled: p.highFilled ?? 0 };
+  // feature 004: the plot's blueprint is its recipe version (legacy towers keep clock-tower-v1)
+  const blueprintId = isBlueprintId(p.blueprintId) ? p.blueprintId : CLOCK_TOWER.id;
+  const st = blueprintById(blueprintId).stages[p.completedStages];
+  const ab = [p.filledA ?? 0, p.filledB ?? 0];
+  return {
+    blueprintId, completedStages: p.completedStages, filled: st ? st.recipe.map((_, i) => ab[i] ?? 0) : [],
+    groundDug: p.groundDug ?? 0, groundPoured: p.groundPoured ?? 0, highFilled: p.highFilled ?? 0,
+  };
 }
 export interface PieceView {
   type: string;

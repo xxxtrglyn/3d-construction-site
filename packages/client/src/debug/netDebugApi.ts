@@ -1,4 +1,5 @@
-import { kindOfMachine, plotOfMachine, type PieceTypeId } from '@hht/shared';
+import { kindOfMachine, needsOf, plotOfMachine, type PieceTypeId } from '@hht/shared';
+import { progressOf } from '../net/connection.ts';
 import type { NetGame } from '../game/NetGame.ts';
 import type { NetPlay } from '../game/NetPlay.ts';
 import { QUALITY } from '../render/quality.ts';
@@ -33,10 +34,17 @@ export function installNetDebugApi(game: NetGame, ready: Promise<void>, params: 
       return b.sample(game.conn.clock.serverNow(), pose) ? [pose.x, pose.y, pose.z] : null;
     },
     plots: () => Array.from(game.conn.state.plots, (p, index) => ({
-      index, state: p.state, completedStages: p.completedStages, filledSlots: p.filledSlots, hostName: p.hostName, joinMode: p.joinMode, crewSize: p.crewSize, bin: Array.from(p.bin),
+      index, state: p.state, blueprintId: p.blueprintId, completedStages: p.completedStages, filledA: p.filledA, filledB: p.filledB, filledSlots: p.filledA + p.filledB, needs: needsOf(progressOf(p)), hostName: p.hostName, joinMode: p.joinMode, crewSize: p.crewSize, bin: Array.from(p.bin),
       groundDug: p.groundDug, groundPoured: p.groundPoured, highFilled: p.highFilled, mixerBags: p.mixerBags, hookType: p.hookType, palletTypes: Array.from(p.palletTypes),
       machineOps: Array.from(p.machineOps),
     })),
+    // feature 004: per-material needs of a plot (default: the own crew's plot), and open ghost counts per type
+    needs: (plot?: number) => {
+      const i = plot ?? game.conn.state.players.get(game.me)?.crewPlot ?? -1;
+      const p = game.conn.state.plots[i];
+      return p ? needsOf(progressOf(p)) : [];
+    },
+    ghosts: () => (game as unknown as NetPlay).world?.ghostCounts() ?? {},
     // feature 003 (contracts/debug-api.md)
     machines: () => game.machinePoses.map((m) => {
       const pv = game.conn.state.plots[plotOfMachine(m.id)];

@@ -7,11 +7,11 @@
  * never Math.sin/cos/atan2, so identical inputs give bit-identical states on every JS engine. No
  * randomness and no clock: time comes in only as `dt`.
  */
-import { CLOCK_TOWER, type Blueprint } from './blueprints.ts';
+import type { Blueprint, StageDef } from './blueprints.ts';
 import { MACHINE } from './constants.ts';
 import { STEP_UP, WORKER_RADIUS, pushBox, pushCyl, type MoveInput, type Push } from './kinematics.ts';
 import type { PieceTypeId } from './pieces.ts';
-import { currentStage, groundworkPart, type TowerProgress } from './progression.ts';
+import { blueprintOf, currentStage, groundworkPart, highItem, openSlots, openSlotsOf, type TowerProgress } from './progression.ts';
 import { dist2, inPlaza, inSquare, distToSquare, type MachineSpots, type ObstacleBox, type ObstacleCyl, type PlotDef, type SiteLayout } from './site.ts';
 
 // ---------------------------------------------------------------- identity
@@ -434,8 +434,9 @@ function stepForklift(s: MachineState, input: MoveInput, dt: number, ctx: Machin
   const braking = (p3 > 0 && want < p3) || (p3 < 0 && want > p3);
   p3 = approach(p3, want, (braking ? FORK_BRAKE : FORK_ACCEL) * dt);
   p2 = -axis(input.dx) * F.steerMax;
-  // car steering while rolling, plus a turn on the spot when slow or stopped (A/D alone must turn it)
-  const pivot = -axis(input.dx) * F.pivotRate * Math.max(0, 1 - Math.abs(p3) / FORK_PIVOT_FADE);
+  // car steering while rolling; A/D alone (no throttle) also turns it on the spot when slow or stopped.
+  // With W/S held it is a pure car again, so reversing out of a spot keeps car steering.
+  const pivot = input.dz === 0 ? -axis(input.dx) * F.pivotRate * Math.max(0, 1 - Math.abs(p3) / FORK_PIVOT_FADE) : 0;
   yaw = wrapAngle(yaw + ((p3 * p2) / FORK_WHEELBASE + pivot) * dt);
   const fx = dsin(yaw);
   const fz = dcos(yaw);
@@ -622,8 +623,26 @@ export function handSlotPositions(plot: PlotDef, count: number): Array<{ x: numb
   return out;
 }
 
-/** The open slots of a plot's current step (Groundwork footing, or the stage's hand and high slots). */
-export function openSlotRefs(plot: PlotDef, spots: MachineSpots, p: TowerProgress, bp: Blueprint = CLOCK_TOWER): SlotRef[] {
+/**
+ * The ordinary (hand) slots of a stage, typed: `handSlotPositions(plot, Σordinary)` assigned to the
+ * recipe materials in order, main material first (feature 004, research R4). `index` is per material.
+ */
+export function stageHandSlots(plot: PlotDef, st: StageDef): Array<{ index: number; type: PieceTypeId; x: number; y: number; z: number }> {
+  const total = st.recipe.reduce((a, r) => a + r.count - r.high, 0);
+  const pos = handSlotPositions(plot, total);
+  const out: Array<{ index: number; type: PieceTypeId; x: number; y: number; z: number }> = [];
+  let k = 0;
+  for (const r of st.recipe) {
+    for (let i = 0; i < r.count - r.high; i++) {
+      const q = pos[k++] as { x: number; y: number; z: number };
+      out.push({ index: i, type: r.type, x: q.x, y: q.y, z: q.z });
+    }
+  }
+  return out;
+}
+
+/** The open slots of a plot's current step (Groundwork footing, or the stage's typed hand and high slots). */
+export function openSlotRefs(plot: PlotDef, spots: MachineSpots, p: TowerProgress, bp: Blueprint = blueprintOf(p)): SlotRef[] {
   const out: SlotRef[] = [];
   const part = groundworkPart(p, bp);
   if (part === 'dig') return out;
@@ -636,16 +655,18 @@ export function openSlotRefs(plot: PlotDef, spots: MachineSpots, p: TowerProgres
   }
   const st = currentStage(p, bp);
   if (!st) return out;
-  const hand = st.slotCount - st.highSlots;
-  const pos = handSlotPositions(plot, hand);
-  for (let i = p.filledSlots - p.highFilled; i < hand; i++) {
-    const q = pos[i] as { x: number; y: number; z: number };
-    out.push({ index: i, high: false, type: st.pieceType, x: q.x, y: q.y, z: q.z });
+  const h = highItem(st);
+  // ordinary fills of each material take that material's slots in order
+  const used = st.recipe.map((_, i) => (p.filled[i] ?? 0) - (i === h ? p.highFilled : 0));
+  for (const s of stageHandSlots(plot, st)) {
+    const i = st.recipe.findIndex((r) => r.type === s.type);
+    if (s.index >= (used[i] ?? 0)) out.push({ index: s.index, high: false, type: s.type, x: s.x, y: s.y, z: s.z });
   }
   const highs = spots.highSlots[st.number - 1] ?? [];
+  const hType = h >= 0 ? (st.recipe[h] as { type: PieceTypeId }).type : st.pieceType;
   for (let i = p.highFilled; i < st.highSlots; i++) {
     const q = highs[i];
-    if (q) out.push({ index: i, high: true, type: st.pieceType, x: q.x, y: q.y, z: q.z });
+    if (q) out.push({ index: i, high: true, type: hType, x: q.x, y: q.y, z: q.z });
   }
   return out;
 }
@@ -696,12 +717,29 @@ export function setDownSpot(x: number, z: number, ctx: MachineCtx): { x: number;
   return { x: ctx.spots.hookPad.x, z: ctx.spots.hookPad.z };
 }
 
-/** Which machine the crew cue points at (FR-022a): excavator while digging, mixer while pouring, crane while high slots are open. */
-export function neededMachine(p: TowerProgress, bp: Blueprint = CLOCK_TOWER): MachineKind | null {
+/**
+ * feature 004 (FR-016): how many pieces of `type` a forklift pallet takes at a rack — the remaining
+ * need of that material (ordinary slots first, then its high slots for the crane), at most a full pallet;
+ * cement during the concrete part of Groundwork (bags still to pour minus bags already in the mixer).
+ */
+export function palletSize(p: TowerProgress, type: PieceTypeId, mixerBags = 0, bp: Blueprint = blueprintOf(p)): number {
+  const max = MACHINE.forklift.palletMax;
+  const part = groundworkPart(p, bp);
+  if (part === 'dig') return 0;
+  if (part === 'concrete') return type === 'cement' ? Math.max(0, Math.min(max, bp.groundwork.concrete - p.groundPoured - mixerBags)) : 0;
+  const o = openSlotsOf(p, type, bp);
+  return Math.min(max, o.ordinary > 0 ? o.ordinary : o.high);
+}
+
+/**
+ * Which machine the crew cue points at (003 FR-022a, 004 FR-015): excavator while digging, mixer while
+ * pouring, crane once every slot still open in the stage is a high (crane-only) slot.
+ */
+export function neededMachine(p: TowerProgress, bp: Blueprint = blueprintOf(p)): MachineKind | null {
   const part = groundworkPart(p, bp);
   if (part === 'dig') return 'excavator';
   if (part === 'concrete') return 'mixer';
-  const st = currentStage(p, bp);
-  if (st && st.highSlots - p.highFilled > 0) return 'crane';
+  const open = openSlots(p, bp);
+  if (open.high > 0 && open.hand === 0) return 'crane';
   return null;
 }

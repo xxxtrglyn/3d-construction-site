@@ -296,7 +296,49 @@ def masterpiece_extras(T):
                     segments=12, ring_count=8)
 
 
-def build(stage):
+def second_materials(T, stage, h1, h2, lod=False):
+    """Feature 004 (research R11): each stage's second recipe material stays visible on the tower.
+
+    Frame +bricks: brick footings under the columns. Walls +beams: steel lintels over the ground-floor
+    openings. Roof +beams: a steel collar ring under the eave. Paint +panel: teal shutters beside the
+    tall windows. Decoration +paint: a purple paint band on the base course. Masterpiece +decor: a pink
+    pennant weathervane on the eave corner. Colours match the rack pieces (racks.RACK_COLORS).
+    """
+    if stage >= 1:
+        foot = M('stone') if stage >= 4 else M('brick')
+        hh = L1[0] / 2
+        for sx in (-1, 1):
+            for sy in (-1, 1):
+                new_obj('cube', 'BrickFooting', loc=(sx * hh, sy * hh, 0.2), scale=D(0.3, 0.3, 0.2), mat=foot, bevel=0.025, parent=T)
+    if stage >= 2 and not lod:  # small details: LOD0 only (far towers keep the LOD1 budget)
+        lintel = M('gold') if stage >= 6 else M('beam')
+        for face in FACES:
+            us = (-0.55, 0.55) if face == 'S' else (0,)
+            for u in us:
+                face_box(T, 'Lintel', face, h1, u, 1.24, 0.46, 0.07, 0.07, lintel, bevel=0.01)
+            if face == 'S':
+                face_box(T, 'Lintel', face, h1, 0, 1.13, 0.62, 0.07, 0.07, lintel, bevel=0.01)
+    if stage >= 3:
+        collar = M('gold') if stage >= 6 else M('beam')
+        hc = L3[0] / 2 + 0.03
+        for sx in (-1, 1):
+            beam((-hc, sx * hc, 4.24), (hc, sx * hc, 4.24), 0.04, collar, 'RoofCollar', parent=T, square=True)
+            beam((sx * hc, -hc, 4.24), (sx * hc, hc, 4.24), 0.04, collar, 'RoofCollar', parent=T, square=True)
+    if stage >= 4 and not lod:
+        shutter = M('gold') if stage >= 6 else M('teal')
+        for face in FACES:
+            for u in (-0.27, 0.27):
+                face_box(T, 'Shutter', face, h2, u, 2.35, 0.13, 0.6, 0.03, shutter, bevel=0.01)
+    if stage >= 5:
+        new_obj('cube', 'PaintBand', loc=(0, 0, 0.33), scale=D(1.8, 1.8, 0.06), mat=M('purple'), bevel=0.01, parent=T)
+    if stage >= 6:
+        hv = L3[0] / 2 + 0.05
+        base = Vector((hv, -hv, 4.38))
+        beam(base, base + Vector((0, 0, 0.55)), 0.016, M('gold'), 'VanePole', parent=T, vertices=6)
+        tri_flag('VanePennant', base + Vector((0.01, 0, 0.55)), 0.32, M('pink'), parent=T)
+
+
+def build(stage, lod=False):
     """Build the tower as it looks when `stage` (0..6) is complete. Returns the root empty."""
     T = empty(f'ClockTower_Stage{stage}')
     h1, h2, h3 = L1[0] / 2, L2[0] / 2, L3[0] / 2
@@ -319,6 +361,7 @@ def build(stage):
         new_obj('cube', 'Slab1', loc=(0, 0, 1.55), scale=D(1.8, 1.8, 0.08), mat=M('concrete'), bevel=0.02, parent=T)
         for sx, sy, top in ((-1, -1, 3.8), (1, -1, 3.55), (1, 1, 3.7)):
             beam((sx * h3, sy * h3, 3.1), (sx * h3, sy * h3, top), 0.06, M('beam'), 'Column', parent=T, square=True)
+        second_materials(T, stage, h1, h2, lod)
         return T
 
     # 2+: walls
@@ -402,4 +445,5 @@ def build(stage):
         garlands(T, with_bulbs=stage >= 6)
     if stage >= 6:
         masterpiece_extras(T)
+    second_materials(T, stage, h1, h2, lod)
     return T

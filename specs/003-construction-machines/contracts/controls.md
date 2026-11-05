@@ -18,7 +18,7 @@ The context-sensitive `action` gets a new priority, inserted before the 002 item
 
 | Input | Keyboard / mouse | Touch | Gamepad | Excavator | Forklift | Crane | Mixer |
 |---|---|---|---|---|---|---|---|
-| move | WASD / arrows | left joystick | left stick | W/S drive, A/D turn | W/S throttle, A/D steer (turns on the spot when slow or stopped) | A/D swing the arm, W/S move the hook out/in | — |
+| move | WASD / arrows | left joystick | left stick | W/S drive, A/D turn | W/S throttle, A/D steer (A/D alone turns it on the spot when slow or stopped) | A/D swing the arm, W/S move the hook out/in | — |
 | action | E / left click | ACTION button | X | Scoop / Dump | Load / Unload | Grab / Release (the hook lowers and rises by itself) | Mix |
 | jump | Space | JUMP button (label "Exit") | A | get out | get out | get out | get out |
 | toss | Q | TOSS button (label "Camera") | B | follow ↔ driver camera | follow ↔ driver camera | hook camera ↔ cab camera | mixer view ↔ free camera |

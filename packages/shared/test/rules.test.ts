@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
-  CLOCK_TOWER, CREW, PIECE_GRAVITY, addToBin, arcPosition, assignPlot, becomesUnattended, canBin, dropPoint, hostOf,
+  CLOCK_TOWER, CLOCK_TOWER_V1, CREW, PIECE_GRAVITY, addToBin, arcPosition, assignPlot, becomesUnattended, binAccepts, canBin, deliver, dropPoint, hostOf, initialProgress,
   nextEpoch, nextHost, removeMember, requestJoin, segmentHitsCircle, setHost, shiftPhase, shouldHandOver, takeFromBin, tossArc,
   type BinEntry, type CrewMember, type CrewRecord, type MemberStatus, type PlotRecord,
 } from '../src/index.ts';
@@ -101,10 +101,38 @@ describe('supply bins', () => {
   });
   it('take prefers the needed type and returns the donor', () => {
     const bin: BinEntry[] = [{ type: 'beam', donorKeyHash: 'a', donorPid: 'pa' }, { type: 'brick', donorKeyHash: 'b', donorPid: 'pb' }, { type: 'paint', donorKeyHash: 'c', donorPid: null }];
-    expect(takeFromBin(bin, 'beam')?.donorKeyHash).toBe('a');
-    expect(takeFromBin(bin, 'bell')?.type).toBe('paint');
+    expect(takeFromBin(bin, ['beam'])?.donorKeyHash).toBe('a');
+    expect(takeFromBin(bin, ['bell'])?.type).toBe('paint');
     expect(bin).toHaveLength(1);
-    expect(takeFromBin([], 'beam')).toBeUndefined();
+    expect(takeFromBin([], ['beam'])).toBeUndefined();
+  });
+  it('take honours the preference order (feature 004)', () => {
+    const mk = (): BinEntry[] => [{ type: 'paint', donorKeyHash: 'a', donorPid: null }, { type: 'brick', donorKeyHash: 'b', donorPid: null }, { type: 'beam', donorKeyHash: 'c', donorPid: null }];
+    expect(takeFromBin(mk(), ['beam', 'brick'])?.type).toBe('beam');
+    expect(takeFromBin(mk(), ['brick', 'beam'])?.type).toBe('brick');
+    expect(takeFromBin(mk(), [])?.type).toBe('beam'); // most recent
+  });
+  it('binAccepts (FR-018): only what the stage still needs beyond what is binned; cement as in 003', () => {
+    const frame = { ...initialProgress(), groundDug: 6, groundPoured: 4 }; // needs 4 beams + 2 bricks
+    const brick = (): BinEntry => ({ type: 'brick', donorKeyHash: 'd', donorPid: null });
+    expect(binAccepts('brick', frame, [], CLOCK_TOWER)).toBeNull();
+    expect(binAccepts('brick', frame, [brick()], CLOCK_TOWER)).toBeNull();
+    expect(binAccepts('brick', frame, [brick(), brick()], CLOCK_TOWER)).toBe('notNeeded');
+    const oneBrickIn = deliver(frame, 'brick').progress;
+    expect(binAccepts('brick', oneBrickIn, [brick()], CLOCK_TOWER)).toBe('notNeeded');
+    expect(binAccepts('paint', frame, [], CLOCK_TOWER)).toBe('notNeeded');
+    expect(binAccepts('cone', frame, [], CLOCK_TOWER)).toBe('notBinnable');
+    expect(binAccepts('concrete', frame, [], CLOCK_TOWER)).toBe('notBinnable');
+    expect(binAccepts('cement', frame, [], CLOCK_TOWER)).toBeNull();
+    const full: BinEntry[] = Array.from({ length: 10 }, () => ({ type: 'cement', donorKeyHash: 'd', donorPid: null }));
+    expect(binAccepts('beam', frame, full, CLOCK_TOWER)).toBe('full');
+    // during Groundwork the bin stocks the Frame's materials
+    expect(binAccepts('beam', initialProgress(), [], CLOCK_TOWER)).toBeNull();
+    expect(binAccepts('paint', initialProgress(), [], CLOCK_TOWER)).toBe('notNeeded');
+    // legacy towers use their own recipe
+    const legacy = { ...initialProgress(CLOCK_TOWER_V1), groundDug: 6, groundPoured: 4 };
+    expect(binAccepts('brick', legacy, [], CLOCK_TOWER_V1)).toBe('notNeeded');
+    expect(binAccepts('beam', legacy, [], CLOCK_TOWER_V1)).toBeNull();
   });
 });
 

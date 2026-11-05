@@ -3,8 +3,8 @@ import { describe, expect, it } from 'vitest';
 import {
   CLOCK_TOWER, MACHINE, MACHINE_KINDS, MACHINE_RADIUS, SIM_DT, SITE,
   atPit, atSpoil, canEnter, deliver, dist2, dsin, dcos, entryPoint, exitSpot, hookPos, hookRestY, inNoDrive, inYard, initialProgress,
-  kindOfMachine, machineCtx, machineError, machineId, neededMachine, openSlotRefs, parkedState, plotOfMachine, rackAtForks, seatPose,
-  setDownSpot, snapTarget, stepMachine, toolTip, towerBlocker, wrapAngle,
+  kindOfMachine, machineCtx, machineError, machineId, neededMachine, openSlotRefs, palletSize, parkedState, plotOfMachine, rackAtForks, seatPose,
+  setDownSpot, snapTarget, stageHandSlots, stepMachine, toolTip, towerBlocker, wrapAngle,
   type MachineCtx, type MachineKind, type MachineState, type MoveInput, type TowerProgress,
 } from '../src/index.ts';
 
@@ -193,6 +193,9 @@ describe('phases', () => {
     expect(turned).toBeCloseTo(-MACHINE.forklift.pivotRate, 1); // 1 s of D: −1.6 rad, clockwise like steering right
     const left = run(s, ctx, hold(60, -127, 0)).at(-1)!;
     expect(Math.atan2(Math.sin(left.yaw - s.yaw), Math.cos(left.yaw - s.yaw))).toBeCloseTo(MACHINE.forklift.pivotRate, 1);
+    // with throttle held there is no pivot: from standstill W+D starts as a car (no yaw on the first step)
+    const wd = stepMachine(s, input(127, 127), SIM_DT, ctx).state;
+    expect(Math.abs(Math.atan2(Math.sin(wd.yaw - s.yaw), Math.cos(wd.yaw - s.yaw)))).toBeLessThan(0.01);
     // at full speed the turn is plain car steering (no extra pivot)
     const fast = { ...s, p3: MACHINE.forklift.speed };
     const one = stepMachine(fast, input(127, 127), SIM_DT, ctx).state;
@@ -232,26 +235,59 @@ describe('function rules', () => {
   const plot = 0;
   const def = SITE.plots[plot]!;
   const spots = SITE.machines[plot]!;
-  const toStage = (n: number, filled = 0, highFilled = 0): TowerProgress => ({ ...ready(), completedStages: n - 1, filledSlots: filled, highFilled });
+  const toStage = (n: number, filled: number[] = [0, 0], highFilled = 0): TowerProgress => ({ ...ready(), completedStages: n - 1, filled, highFilled });
 
   it('snapTarget: within 1.5 m horizontal, nearest of several, matching type, open slots only, high and hand slots', () => {
-    const p = toStage(3, 2, 1); // Roof & Windows: 1 hand + 1 high filled
+    const p = toStage(3, [1, 1], 1); // Roof & Windows (panel×4 high 3, beam×2): 1 high panel + 1 beam filled
     const slots = openSlotRefs(def, spots, p);
-    expect(slots.filter((s) => !s.high)).toHaveLength(2);
+    expect(slots.filter((s) => !s.high && s.type === 'panel')).toHaveLength(1);
+    expect(slots.filter((s) => !s.high && s.type === 'beam')).toHaveLength(1);
     expect(slots.filter((s) => s.high)).toHaveLength(2);
-    expect(slots.every((s) => s.type === 'panel')).toBe(true);
+    expect(slots.filter((s) => s.high).every((s) => s.type === 'panel')).toBe(true);
     const high = slots.find((s) => s.high)!;
     expect(snapTarget({ x: high.x + 1.2, z: high.z }, 'panel', slots.filter((s) => s.high))).toEqual(high);
     expect(snapTarget({ x: high.x + 1.6, z: high.z + 0.5 }, 'panel', [high])).toBeNull();
     expect(snapTarget({ x: high.x, z: high.z }, 'bell', slots)).toBeNull();
     // nearest of several
-    const hand = slots.find((s) => !s.high)!;
+    const hand = slots.find((s) => !s.high && s.type === 'panel')!;
     const t = snapTarget({ x: hand.x, z: hand.z }, 'panel', slots);
     expect(t).toEqual(hand);
+    // a beam never snaps into a panel slot, even right above it
+    const beamSlot = slots.find((s) => s.type === 'beam')!;
+    expect(snapTarget({ x: hand.x, z: hand.z }, 'beam', slots.filter((s) => s.high || s.type === 'panel'))).toBeNull();
+    expect(snapTarget({ x: beamSlot.x, z: beamSlot.z }, 'beam', slots)).toEqual(beamSlot);
     // the filled high slot (index 0) is not offered
     expect(slots.some((s) => s.high && s.index === 0)).toBe(false);
     const bell = openSlotRefs(def, spots, toStage(6));
-    expect(bell).toEqual([expect.objectContaining({ high: true, type: 'bell', y: 9.3 })]);
+    expect(bell).toEqual([expect.objectContaining({ high: false, type: 'decor', index: 0 }), expect.objectContaining({ high: true, type: 'bell', y: 9.3 })]);
+  });
+  it('typed hand slots (004): grouped by material in recipe order, indexed per material, filled in order', () => {
+    const st = CLOCK_TOWER.stages[1]!; // brick×6 + beam×2
+    const all = stageHandSlots(def, st);
+    expect(all.map((s) => s.type)).toEqual(['brick', 'brick', 'brick', 'brick', 'brick', 'brick', 'beam', 'beam']);
+    expect(all.map((s) => s.index)).toEqual([0, 1, 2, 3, 4, 5, 0, 1]);
+    const p = toStage(2, [2, 1]);
+    const open = openSlotRefs(def, spots, p);
+    expect(open.filter((s) => s.type === 'brick').map((s) => s.index)).toEqual([2, 3, 4, 5]);
+    expect(open.filter((s) => s.type === 'beam').map((s) => s.index)).toEqual([1]);
+    // positions are stable: the open ones are the tail of each material's range
+    expect(open.find((s) => s.type === 'beam')).toMatchObject({ x: all[7]!.x, z: all[7]!.z });
+    // the legacy blueprint keeps one material on every slot
+    const legacy = openSlotRefs(def, spots, { ...ready(), blueprintId: 'clock-tower-v1', completedStages: 1, filled: [3] });
+    expect(legacy).toHaveLength(5);
+    expect(legacy.every((s) => s.type === 'brick')).toBe(true);
+  });
+  it('palletSize (004, FR-016): remaining need of that material, ordinary first, max 4; cement while pouring', () => {
+    const walls = toStage(2);
+    expect(palletSize(walls, 'brick')).toBe(4);
+    expect(palletSize(walls, 'beam')).toBe(2);
+    expect(palletSize(walls, 'paint')).toBe(0);
+    expect(palletSize(toStage(2, [5, 2]), 'brick')).toBe(1);
+    const roof = toStage(3, [1, 0]); // the ordinary panel slot is full: high panels for the crane
+    expect(palletSize(roof, 'panel')).toBe(3);
+    expect(palletSize({ ...initialProgress(), groundDug: 6, groundPoured: 1 }, 'cement', 1)).toBe(2);
+    expect(palletSize({ ...initialProgress(), groundDug: 6, groundPoured: 1 }, 'beam')).toBe(0);
+    expect(palletSize(initialProgress(), 'cement')).toBe(0);
   });
   it('the footing slots are offered while pouring; nothing while digging', () => {
     expect(openSlotRefs(def, spots, initialProgress())).toEqual([]);
@@ -262,7 +298,7 @@ describe('function rules', () => {
     expect(f.every((s) => Math.hypot(s.x - def.x, s.z - def.z) < def.towerHalf)).toBe(true);
   });
   it('a crane delivery into a ring slot is a normal deliver() (high counts only via the crane)', () => {
-    const p = toStage(3, 3, 0);
+    const p = toStage(3, [1, 0], 0);
     expect(deliver(p, 'panel', 'hand').result).toBe('tooHigh');
     expect(deliver(p, 'panel', 'crane', { high: true }).progress.highFilled).toBe(1);
   });
@@ -294,13 +330,15 @@ describe('function rules', () => {
     const open = setDownSpot(spots.hookPad.x, spots.hookPad.z, ctx);
     expect(open).toEqual({ x: spots.hookPad.x, z: spots.hookPad.z });
   });
-  it('neededMachine: excavator while digging, mixer while pouring, crane while high slots are open', () => {
+  it('neededMachine: excavator while digging, mixer while pouring, crane once only high slots are open (004 FR-015)', () => {
     expect(neededMachine(initialProgress())).toBe('excavator');
     expect(neededMachine({ ...initialProgress(), groundDug: 6 })).toBe('mixer');
     expect(neededMachine(ready())).toBeNull();
-    expect(neededMachine(toStage(3))).toBe('crane');
-    expect(neededMachine(toStage(3, 4, 3))).toBeNull();
-    expect(neededMachine(toStage(6))).toBe('crane');
+    expect(neededMachine(toStage(3))).toBeNull(); // ordinary panel + beams still open
+    expect(neededMachine(toStage(3, [1, 2]))).toBe('crane');
+    expect(neededMachine(toStage(3, [4, 2], 3))).toBeNull();
+    expect(neededMachine(toStage(6))).toBeNull(); // the decor crate first (or the bell, either works)
+    expect(neededMachine(toStage(6, [0, 1]))).toBe('crane');
     expect(neededMachine({ ...ready(), completedStages: 6 })).toBeNull();
     void CLOCK_TOWER;
   });

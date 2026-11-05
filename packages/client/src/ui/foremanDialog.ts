@@ -1,4 +1,5 @@
-import { CLOCK_TOWER, starsOf } from '@hht/shared';
+import { CLOCK_TOWER, TOTAL_DELIVERIES, currentStage, groundworkPart, needsOf, starsOf } from '@hht/shared';
+import { foremanLine } from './needsText.ts';
 import { progressOf, type WorldView } from '../net/connection.ts';
 import { flagHtml } from './flags.ts';
 import { Panel, button } from './panel.ts';
@@ -14,6 +15,7 @@ export class ForemanDialog {
   private readonly panel: Panel;
   private readonly h: ForemanHandlers;
   private state: WorldView | null = null;
+  private myPlot = -1;
 
   constructor(root: HTMLElement, h: ForemanHandlers) {
     this.panel = new Panel(root, 'foreman-dialog');
@@ -28,10 +30,15 @@ export class ForemanDialog {
     this.panel.close();
   }
 
-  open(state: WorldView, inCrew: boolean): void {
+  /** `myPlot`: the asking player's crew plot, or -1. A crew member also hears what their tower still needs (004 FR-014). */
+  open(state: WorldView, myPlot: number): void {
     this.state = state;
+    this.myPlot = myPlot;
+    const inCrew = myPlot >= 0;
     this.panel.show('👷‍♂️ Foreman');
     this.panel.text(inCrew ? '“You’re already on a crew — finish that tower first, or leave the crew.”' : '“Welcome to the site! What can I do for you?”');
+    const line = inCrew ? this.needsLine(state, myPlot) : null;
+    if (line) this.panel.text(`“${line}”`).dataset.testid = 'foreman-needs';
     if (!inCrew) this.panel.wide('🏗️  Start a building', () => this.blueprints(), 'foreman-start');
     this.panel.wide('📋  Who’s hiring?', () => this.hiring(), 'foreman-hiring');
     const unattended = Array.from(state.plots).some((p) => p.state === 'unattended');
@@ -39,14 +46,26 @@ export class ForemanDialog {
     this.panel.wide('👋  Bye', () => this.close(), 'foreman-bye');
   }
 
+  /** The crew's tower needs in one templated line (contracts/needs-display.md "Foreman lines"). */
+  private needsLine(state: WorldView, plot: number): string | null {
+    const p = state.plots[plot];
+    if (!p || p.state !== 'building') return null;
+    const progress = progressOf(p);
+    const part = groundworkPart(progress);
+    if (part) return part === 'dig' ? 'First dig the pit with the excavator!' : 'Now pour the footing: cement bags into the mixer!';
+    const stage = currentStage(progress);
+    const line = foremanLine(needsOf(progress));
+    return stage && line ? `${stage.name}: ${line}` : null;
+  }
+
   private blueprints(): void {
     this.panel.show('🏗️ Pick a blueprint');
-    this.panel.row('🕰️ <b>Clock Tower</b>', `${CLOCK_TOWER.stages.length} stages · ${CLOCK_TOWER.stages.reduce((s, x) => s + x.slotCount, 0)} deliveries · ends in a Masterpiece`);
+    this.panel.row('🕰️ <b>Clock Tower</b>', `${CLOCK_TOWER.stages.length} stages · ${TOTAL_DELIVERIES} deliveries of 2 materials each stage · ends in a Masterpiece`);
     this.panel.wide('✅  Let’s build!', () => {
       this.h.start();
       this.close();
     }, 'foreman-build');
-    this.panel.wide('↩  Back', () => this.state && this.open(this.state, false));
+    this.panel.wide('↩  Back', () => this.state && this.open(this.state, this.myPlot));
   }
 
   private hiring(): void {
@@ -65,7 +84,7 @@ export class ForemanDialog {
       });
     });
     if (!n) this.panel.text('Nobody is hiring right now — start your own building!');
-    this.panel.wide('↩  Back', () => this.open(st, false));
+    this.panel.wide('↩  Back', () => this.open(st, this.myPlot));
   }
 
   private unfinished(): void {
@@ -81,6 +100,6 @@ export class ForemanDialog {
       });
       b.dataset.testid = `adopt-${i}`;
     });
-    this.panel.wide('↩  Back', () => this.open(st, false));
+    this.panel.wide('↩  Back', () => this.open(st, this.myPlot));
   }
 }

@@ -4,11 +4,12 @@ A browser-based 3D chibi construction-site sandbox: about 100 players per world 
 and players join from a link.
 
 - **Constitution (binding)**: `.specify/memory/constitution.md`
-- **Active feature**: `specs/003-construction-machines/` (operable crane, excavator, forklift and
-  mixer per plot and in solo; Groundwork and crane-only high slots; protocol v2: spec, plan,
-  research M1–M16, data model, contracts). Feature 002 (`specs/002-multiplayer-core/`, multiplayer
-  world with Host crews) is implemented; its gate has owner/device/playtest items open. Feature 001
-  stays available as solo mode (`?solo=1`).
+- **Active feature**: `specs/004-mixed-material-stages/` (two materials per stage, 31 deliveries;
+  typed ghost slots, surplus refused kindly, per-material needs on sign/HUD/Foreman; recipe version =
+  blueprint id, legacy `clock-tower-v1`; protocol v3, schema v3: spec, plan, research R1–R13, data
+  model, contracts). Feature 003 (`specs/003-construction-machines/`, operable machines, protocol v2)
+  is implemented; its gate has owner/device/playtest items open, as does 002's. Feature 001 stays
+  available as solo mode (`?solo=1`).
 - **Approved art references**: `assets/renders/` (toon look); source scenes are in
   `assets/blender/`
 
@@ -49,12 +50,15 @@ Server env: `HHT_PORT`, `HHT_DB`, `HHT_SHIFT_MINUTES`, `HHT_MAX_PLAYERS`, `HHT_M
 Status: feature 001 is done (gate in `specs/001-single-player-prototype/gate.md`). Feature 002 is
 implemented (gate in `specs/002-multiplayer-core/gate.md`, automated items pass). Feature 003 is
 implemented (gate in `specs/003-construction-machines/gate.md`; protocol v2, database schema v2;
-owner, device and playtest items open). Music and machine sounds: `tools/audio/generate-audio.mjs`
+owner, device and playtest items open). Feature 004 (mixed-material stages) is being implemented
+(gate in `specs/004-mixed-material-stages/gate.md`; protocol v3, database schema v3: old towers keep
+blueprint `clock-tower-v1`). Music and machine sounds: `tools/audio/generate-audio.mjs`
 (ElevenLabs; the key comes from `ELEVENLABS_API_KEY`, never committed).
 
 ## Rules of thumb
 
-- Game rules go in `packages/shared` as pure functions with unit tests.
+- Game rules go in `packages/shared` as pure functions with unit tests. Stage needs come from
+  `needsOf()` and its text from `client/src/ui/needsText.ts` only (feature 004).
 - Multiplayer is server-authoritative. Clients send only inputs and intents (`shared/protocol.ts`).
   Movement uses only the deterministic `stepWorker()` (`shared/kinematics.ts`) on both sides, so
   never add client-only movement code. Server systems orchestrate; rules stay pure.

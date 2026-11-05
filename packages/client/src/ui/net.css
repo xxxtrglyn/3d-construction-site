@@ -49,6 +49,10 @@
 .plotlbl .tag.sub { font-weight: 700; opacity: .92; }
 .plotlbl .stars { color: #e6a514; letter-spacing: 1px; }
 .plotlbl .dot { width: 11px; height: 11px; border-radius: 50%; border: 2px solid #2a1a1a; display: inline-block; margin-right: 2px; vertical-align: -1px; }
+.needs { white-space: nowrap; }
+.needs .need b { font-weight: 900; }
+.needs .need.done { opacity: .55; }
+.needs .sep { opacity: .6; }
 .req-stack { position: fixed; top: max(70px, calc(env(safe-area-inset-top) + 60px)); left: 50%; transform: translateX(-50%); display: grid; gap: 6px; pointer-events: auto; z-index: 12; }
 .req-card { display: flex; align-items: center; gap: 10px; padding: 8px 10px; border-radius: 16px; background: #fff7e6; border: 3px solid #2a1a1a; box-shadow: 0 4px 0 #2a1a1a; font-weight: 800; min-width: min(320px, 90vw); }
 .req-card .hat { width: 22px; height: 16px; border-radius: 12px 12px 3px 3px; border: 2px solid #2a1a1a; }

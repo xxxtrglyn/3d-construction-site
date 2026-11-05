@@ -1,15 +1,8 @@
 import * as THREE from 'three';
-import { PIECE_TYPES, type PieceTypeId } from '@hht/shared';
-import { PALETTE } from '../render/palette.gen.ts';
+import type { Need } from '@hht/shared';
+import { chipsHtml, chipsText } from './needsText.ts';
 import './hud.css';
 import './net.css';
-
-const PIECE_COLOR: Record<PieceTypeId, string> = {
-  beam: 'beam', brick: 'brick', panel: 'teal', paint: 'purple', decor: 'pink', bell: 'gold', cone: 'orange', cement: 'concrete', concrete: 'stone',
-};
-
-const css = (rgb: readonly number[] | undefined): string =>
-  rgb ? `rgb(${Math.round((rgb[0] ?? 0) * 255)}, ${Math.round((rgb[1] ?? 0) * 255)}, ${Math.round((rgb[2] ?? 0) * 255)})` : '#ccc';
 
 export interface MenuHandlers {
   onShuffleName(): string;
@@ -140,14 +133,16 @@ export class Hud {
     this.nameTag.textContent = name;
   }
 
-  setNeed(type: PieceTypeId | null, filled: number, total: number): void {
-    if (!type) {
+  /** feature 004 (FR-013): per-material chips for the player's own plot (or a free-form 003 line such as Groundwork). */
+  setNeeds(needs: readonly Need[] | null, line?: string): void {
+    if (!needs?.length && !line) {
       this.need.style.visibility = 'hidden';
       return;
     }
     this.need.style.visibility = '';
-    const color = css(PALETTE[PIECE_COLOR[type]]);
-    this.need.innerHTML = `<span class="dot" style="background:${color}"></span><span>Needs: ${PIECE_TYPES[type].label}</span><span class="count">${filled}/${total}</span>`;
+    this.need.dataset.testid = 'hud-needs';
+    this.need.innerHTML = needs?.length ? `<span class="needs">${chipsHtml(needs)}</span>` : `<span>${line}</span>`;
+    this.need.setAttribute('aria-label', needs?.length ? chipsText(needs) : (line ?? ''));
   }
 
   setStage(name: string, stars: number, masterpiece: boolean): void {

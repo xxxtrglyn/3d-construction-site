@@ -1,6 +1,6 @@
-import { SITE } from '@hht/shared';
+import { SITE, filledTotal, needsOf, type PieceTypeId, type TowerProgress } from '@hht/shared';
 import type { RunningServer } from '../src/server.ts';
-import { sleep, worldOf, type Player } from './helpers.ts';
+import { sleep, until, worldOf, type Player } from './helpers.ts';
 
 export function helpersFor(getServer: () => RunningServer) {
   const S = (p: Player) => worldOf(getServer()).sessions.get(p.welcome.sessionId)!;
@@ -31,5 +31,29 @@ export function helpersFor(getServer: () => RunningServer) {
     await sleep(250);
   };
   const plotState = (plot: number) => worldOf(getServer()).state.plots[plot]!;
-  return { S, put, host, dropAt, plotState, skipGroundwork };
+  /** The server-side progress of a plot's building. */
+  const progressOf = (plot: number): TowerProgress => worldOf(getServer()).systems.plots[plot]!.progress;
+  /** feature 004: slots filled in the current stage, all materials (schema filledA + filledB). */
+  const filledOf = (plot: number) => plotState(plot).filledA + plotState(plot).filledB;
+  /** feature 004: the first recipe material of the current stage that still has an ordinary (hand) slot open. */
+  const handNeed = (plot: number): PieceTypeId | null => needsOf(progressOf(plot)).find((n) => !n.done && !n.craneOnly)?.type ?? null;
+  /**
+   * feature 004: hand-delivers `count` pieces of the current stage's recipe into the plot's build zone
+   * (default: every ordinary slot), always the first material that still has a hand slot, and waits for
+   * each snap. Returns the types delivered, in order.
+   */
+  const deliverRecipe = async (p: Player, plot: number, count = Infinity): Promise<PieceTypeId[]> => {
+    const d = SITE.plots[plot]!;
+    const out: PieceTypeId[] = [];
+    for (let i = 0; i < count; i++) {
+      const type = handNeed(plot);
+      if (!type) break;
+      const before = { stage: progressOf(plot).completedStages, filled: filledTotal(progressOf(plot)) };
+      await dropAt(p, d.x, d.z, type);
+      await until(() => progressOf(plot).completedStages !== before.stage || filledTotal(progressOf(plot)) === before.filled + 1);
+      out.push(type);
+    }
+    return out;
+  };
+  return { S, put, host, dropAt, plotState, skipGroundwork, progressOf, filledOf, handNeed, deliverRecipe };
 }

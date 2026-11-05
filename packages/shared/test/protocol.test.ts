@@ -42,8 +42,8 @@ describe('snapshot codec', () => {
 });
 
 describe('snapshot codec v2 (feature 003)', () => {
-  it('is protocol 2', () => {
-    expect(PROTOCOL_VERSION).toBe(2);
+  it('is protocol 3 (feature 004: filledA/filledB, need lists in hints; the v2 snapshot codec is unchanged)', () => {
+    expect(PROTOCOL_VERSION).toBe(3);
   });
   it('round-trips the 4-bit carry code of all 9 piece types, in the own block and in worker records', () => {
     expect(PIECE_TYPE_IDS).toHaveLength(9);
