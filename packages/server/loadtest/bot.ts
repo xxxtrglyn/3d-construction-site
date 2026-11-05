@@ -317,9 +317,24 @@ export class Bot {
         this.ownMachine = null;
       }
     } else {
-      const dx = this.target.x - this.own.x;
-      const dz = this.target.z - this.own.z;
+      let dx = this.target.x - this.own.x;
+      let dz = this.target.z - this.own.z;
       const d = Math.hypot(dx, dz);
+      // feature 004: walking bots have no pathfinding; with two materials per stage they walk rack → rack and
+      // can press against a rack box forever. Not moving 0.3 m in 1 s while far away → sidestep 90° for 0.9 s.
+      const t = Date.now();
+      if (!this.walkCheck || Math.hypot(this.own.x - this.walkCheck.x, this.own.z - this.walkCheck.z) > 0.3) this.walkCheck = { x: this.own.x, z: this.own.z, at: t };
+      else if (d > 1.5 && t - this.walkCheck.at > 1000 && this.detourUntil < t) {
+        this.detourUntil = t + 900;
+        this.detourSide = -this.detourSide;
+        this.walkCheck.at = t;
+      }
+      if (this.detourUntil > t && d > 0.6) {
+        const sx = -dz * this.detourSide;
+        const sz = dx * this.detourSide;
+        dx = sx;
+        dz = sz;
+      }
       const q = d > 0.6 ? quantizeDir(dx / d, dz / d) : { dx: 0, dz: 0 };
       const run = d > 6;
       const still = this.mode === 'toMachine' && !!this.job?.sent;
@@ -507,6 +522,9 @@ export class Bot {
     }
   }
 
+  private walkCheck: { x: number; z: number; at: number } | null = null;
+  private detourUntil = 0;
+  private detourSide = 1;
   private dbgKey = '';
   private dbgSince = 0;
   private dbgLast = 0;
