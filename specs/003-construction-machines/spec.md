@@ -312,8 +312,8 @@ behavior counts in its report.
   - **action**: the machine's job (scoop or dump, pick up or set down a pallet, pick up or release
     with the hook, start the mixer);
   - **jump**: get out;
-  - **toss**: in the crane, switch between the hook camera and the cab camera; unused in the other
-    machines.
+  - **toss**: switch the camera view: hook camera ↔ cab camera in the crane, follow ↔ driver camera
+    in the excavator and forklift, mixer view ↔ free camera at the mixer (amended 2026-11-05).
   This MUST hold on keyboard, touch and gamepad.
 - **FR-008a**: While operating the crane, the camera MUST start as the **hook camera**: a raised
   view above and behind the hook that keeps the hook, the piece it carries and the slots below it in

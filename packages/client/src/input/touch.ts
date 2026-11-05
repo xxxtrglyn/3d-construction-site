@@ -75,8 +75,8 @@ export class TouchControls {
 
   /**
    * Feature 003: while operating, the buttons are re-mapped, not added — ACTION names the next machine
-   * action (greyed with a reason when nothing is possible), JUMP reads "Exit", TOSS reads "Camera" in the
-   * crane and is hidden otherwise. `null` restores the walking labels.
+   * action (greyed with a reason when nothing is possible), JUMP reads "Exit", TOSS reads "Camera" (it
+   * switches the machine's two camera views). `null` restores the walking labels.
    */
   setMachineMode(m: { action: string; disabled: boolean; toss: string | null } | null): void {
     const key = m ? `${m.action}|${m.disabled}|${m.toss}` : '';

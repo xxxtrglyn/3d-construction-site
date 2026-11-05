@@ -184,6 +184,21 @@ describe('phases', () => {
     expect(atSpoil(atHeap, sp)).toBe(true);
     expect(atSpoil(near, sp)).toBe(false);
   });
+  it('forklift: A/D alone turns it on the spot (same direction as steering while rolling); the pivot fades at speed', () => {
+    const ctx = ctxFor(0);
+    const s = parkedState(machineId(0, 'forklift'), ctx.spots);
+    const right = run(s, ctx, hold(60, 127, 0)).at(-1)!;
+    expect(Math.hypot(right.x - s.x, right.z - s.z)).toBeLessThan(1e-9);
+    const turned = Math.atan2(Math.sin(right.yaw - s.yaw), Math.cos(right.yaw - s.yaw));
+    expect(turned).toBeCloseTo(-MACHINE.forklift.pivotRate, 1); // 1 s of D: −1.6 rad, clockwise like steering right
+    const left = run(s, ctx, hold(60, -127, 0)).at(-1)!;
+    expect(Math.atan2(Math.sin(left.yaw - s.yaw), Math.cos(left.yaw - s.yaw))).toBeCloseTo(MACHINE.forklift.pivotRate, 1);
+    // at full speed the turn is plain car steering (no extra pivot)
+    const fast = { ...s, p3: MACHINE.forklift.speed };
+    const one = stepMachine(fast, input(127, 127), SIM_DT, ctx).state;
+    const expected = ((MACHINE.forklift.speed * -MACHINE.forklift.steerMax) / 1.3) * SIM_DT;
+    expect(Math.atan2(Math.sin(one.yaw - s.yaw), Math.cos(one.yaw - s.yaw))).toBeCloseTo(expected, 4);
+  });
   it('forklift: loads only at a rack, unloads when loaded', () => {
     const ctx = ctxFor(0);
     const s = parkedState(machineId(0, 'forklift'), ctx.spots);

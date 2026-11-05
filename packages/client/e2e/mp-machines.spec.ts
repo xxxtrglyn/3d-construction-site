@@ -132,6 +132,12 @@ test('get in, drive, get out; the other player sees it move; outsiders: Crew onl
   await getIn(a.page, plot, 'forklift');
   expect(await net<string>(a.page, 'camera')).toBe('follow');
   await expect(a.page.getByTestId('machine-hint')).toBeVisible();
+  // the control bar stays the whole time; Q switches follow ↔ driver camera
+  await expect(a.page.getByTestId('machine-bar')).toContainText('Q camera');
+  await key(a.page, 'KeyQ');
+  await expect.poll(() => net<string>(a.page, 'camera'), { timeout: 3000 }).toBe('cab');
+  await key(a.page, 'KeyQ');
+  await expect.poll(() => net<string>(a.page, 'camera'), { timeout: 3000 }).toBe('follow');
   const start = await machine(a.page, id);
   await a.page.locator('#game').focus();
   await a.page.keyboard.down('KeyW');
@@ -154,6 +160,7 @@ test('get in, drive, get out; the other player sees it move; outsiders: Crew onl
   // Space gets out
   await getOut(a.page);
   await expect.poll(() => net<string>(a.page, 'camera'), { timeout: 3000 }).toBe('follow');
+  await expect(a.page.getByTestId('machine-bar')).toBeHidden();
   expect(a.errors).toEqual([]);
   expect(b.errors).toEqual([]);
 });

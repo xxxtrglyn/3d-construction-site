@@ -112,7 +112,7 @@ export class NetPlay extends NetGame {
     this.machineHints = new MachineHints(this.hudRoot, this.profile);
     this.events.addEventListener('machineEntered', (e) => this.machineHints.onEnter((e as CustomEvent<MachineKind>).detail));
     this.events.addEventListener('machineLeft', () => {
-      this.machineHints.hide();
+      this.machineHints.leave();
       this.touch?.setMachineMode(null);
       this.hud.setPrompt(null);
     });
@@ -535,10 +535,10 @@ export class NetPlay extends NetGame {
     const l = this.machineLabel();
     const kind = this.myMachineKind;
     this.hud.setPrompt(l.text, 'E', l.disabled);
-    this.touch?.setMachineMode({ action: l.text, disabled: l.disabled, toss: kind === 'crane' ? 'Camera' : null });
+    this.touch?.setMachineMode({ action: l.text, disabled: l.disabled, toss: 'Camera' });
     const a = this.actions;
     const input = !blocked && (Math.abs(a.move.x) > 0.1 || Math.abs(a.move.y) > 0.1 || this.machineInput);
-    this.machineHints.update(input);
+    this.machineHints.update(input, a.lastDevice);
     this.machineInput = false;
   }
 

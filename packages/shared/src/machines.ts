@@ -97,6 +97,8 @@ const FORK_BRAKE = 10;
 const FORK_LOW = 0.12;
 const FORK_HIGH = 0.55;
 const FORK_LIFT_SPEED = 1.5;
+/** below this speed (m/s) A/D also turns the forklift on the spot, fading out as it speeds up */
+const FORK_PIVOT_FADE = 1.5;
 const BOOM_RATE = 3;
 const DRUM_IDLE = 0.6;
 const DRUM_MIX = 6;
@@ -432,7 +434,9 @@ function stepForklift(s: MachineState, input: MoveInput, dt: number, ctx: Machin
   const braking = (p3 > 0 && want < p3) || (p3 < 0 && want > p3);
   p3 = approach(p3, want, (braking ? FORK_BRAKE : FORK_ACCEL) * dt);
   p2 = -axis(input.dx) * F.steerMax;
-  yaw = wrapAngle(yaw + ((p3 * p2) / FORK_WHEELBASE) * dt);
+  // car steering while rolling, plus a turn on the spot when slow or stopped (A/D alone must turn it)
+  const pivot = -axis(input.dx) * F.pivotRate * Math.max(0, 1 - Math.abs(p3) / FORK_PIVOT_FADE);
+  yaw = wrapAngle(yaw + ((p3 * p2) / FORK_WHEELBASE + pivot) * dt);
   const fx = dsin(yaw);
   const fz = dcos(yaw);
   const r = MACHINE_RADIUS.forklift;

@@ -494,7 +494,7 @@ export class Game extends GameShell {
     this.controller.teleport(new THREE.Vector3(at.x, 0.05, at.z), at.yaw);
     this.camera.yaw = at.yaw + Math.PI;
     this.machineCams.exit();
-    this.machineHints.hide();
+    this.machineHints.leave();
     this.touch?.setMachineMode(null);
     this.sfx.pruneLoops(new Set());
     this.emit('machineExit');
@@ -569,8 +569,8 @@ export class Game extends GameShell {
     if (nowSeated) {
       const l = this.machines.label();
       this.hud.setPrompt(l.text, 'E', l.disabled);
-      this.touch?.setMachineMode({ action: l.text, disabled: l.disabled, toss: this.machines.kindAt(this.machines.seated) === 'crane' ? 'Camera' : null });
-      this.machineHints.update(Math.abs(a.move.x) + Math.abs(a.move.y) > 0.1 || a.wasPressed('action'));
+      this.touch?.setMachineMode({ action: l.text, disabled: l.disabled, toss: 'Camera' });
+      this.machineHints.update(Math.abs(a.move.x) + Math.abs(a.move.y) > 0.1 || a.wasPressed('action'), a.lastDevice);
     } else if (this.machineTargetId >= 0) this.hud.setPrompt(`Get in ${MACHINE_NAME[this.machines.kindAt(this.machineTargetId)]}`);
     else this.hud.setPrompt(null);
     if (!menu && !nowSeated && !seated) {
