@@ -31,7 +31,8 @@ the implementation.
 | Perf (`?perf=1`, `?perf=crowd` with ghosts, `?perf=machines`) | ✅ high and low tiers within budget |
 | Asset budgets | ✅ all pass; critical payload ≈ 1 MB. LOD1 towers leave out lintels and shutters (invisible at that distance) to stay ≤ 39 KB |
 | Load test, 300 s, 100 bots | ✅ budgets: 20 ticks/s, tick avg 3.6 ms, p99 6.6 ms, 14.7 KB/s per bot (p95 17.2), heap ≤ 59 MB; machines: groundworkDone 10, craneSnaps 78–92, forkliftSnaps 20–32, palletUnload 17–21; all old consistency counters 0 |
-| Load test `stalledTowers` | ⚠️ intermittent: 0 in the last two runs, 1 of 12 towers in two earlier runs (a Roof waiting ≥ 120 s for its last beam while all 8 crew bots did other things; pad, zone and crane idle). Not reproduced with `HHT_DEBUG_STALL=1` yet. Kept open. |
+| Load test `stalledTowers` | ✅ fixed (`995f272`): caught with `HHT_DEBUG_STALL=1` — every crew bot of the stalled Roof was walking from the brick rack straight to the beam rack and pressing against the brick rack box (bots have no pathfinding; with two materials per stage they now walk rack → rack). Bots now sidestep when stuck. 3 runs after the fix: 0, 0, 0 stalled; pallet unloads 13/18/21. |
+| Load test timing after the fix | ⚠️ re-run needed on a quiet machine: those 3 runs shared the CPU with Docker containers and an open game tab (load ≈ 7–8) and showed tick avg 18–19 ms, p99 58–64 ms (and 12 divergent views in one run). The server code is unchanged since the passing runs (3.6 ms / 6.6 ms). |
 | Solo time (SC-004), WebKit/Firefox e2e, `pnpm verify`, playtest | open |
 
 ### Fixes found by the load test
