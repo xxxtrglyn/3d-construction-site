@@ -4,11 +4,12 @@ A browser-based 3D chibi construction-site sandbox: about 100 players per world 
 and players join from a link.
 
 - **Constitution (binding)**: `.specify/memory/constitution.md`
-- **Active feature**: `specs/003-construction-machines/` (operable crane, excavator, forklift and
-  mixer per plot and in solo; Groundwork and crane-only high slots; protocol v2: spec, plan,
-  research M1–M16, data model, contracts). Feature 002 (`specs/002-multiplayer-core/`, multiplayer
-  world with Host crews) is implemented; its gate has owner/device/playtest items open. Feature 001
-  stays available as solo mode (`?solo=1`).
+- **Active feature**: `specs/004-mixed-material-stages/` (two materials per stage, 31 deliveries;
+  typed ghost slots, surplus refused kindly, per-material needs on sign/HUD/Foreman; recipe version =
+  blueprint id, legacy `clock-tower-v1`; protocol v3, schema v3: spec, plan, research R1–R13, data
+  model, contracts). Feature 003 (`specs/003-construction-machines/`, operable machines, protocol v2)
+  is implemented; its gate has owner/device/playtest items open, as does 002's. Feature 001 stays
+  available as solo mode (`?solo=1`).
 - **Approved art references**: `assets/renders/` (toon look); source scenes are in
   `assets/blender/`
 
