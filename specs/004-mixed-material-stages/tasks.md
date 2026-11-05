@@ -263,11 +263,11 @@ behaviour, and the new `clock-tower` recipe is live.
   - Decoration: paint stripes;
   - Masterpiece: decor weathervane.
   Render `assets/renders/clock-tower-stages-004.png` for owner review. **Do not integrate before the owner approves** (record it in gate.md).
-- [ ] T055 After approval: run `pnpm assets` and `pnpm check:budgets`. Every `clock-tower-stage-*` (+ `-merged`, `lod1`) must stay within `tools/assets/budgets.json`.
-- [ ] T056 [P] Perf: add the ghosts to `?perf=crowd` (`packages/client/src/debug/crowdScene.ts`: 12 towers mid-stage with open slots). `pnpm perf` must stay within the `render.crowd` budget, with ghosts ≤ 6 draw calls.
+- [X] T055 After approval: run `pnpm assets` and `pnpm check:budgets`. Every `clock-tower-stage-*` (+ `-merged`, `lod1`) must stay within `tools/assets/budgets.json`.
+- [X] T056 [P] Perf: add the ghosts to `?perf=crowd` (`packages/client/src/debug/crowdScene.ts`: 12 towers mid-stage with open slots). `pnpm perf` must stay within the `render.crowd` budget, with ghosts ≤ 6 draw calls.
 - [ ] T057 Run `pnpm loadtest --duration 300` and record bandwidth, tick, `stalledTowers` and towers/shift vs 003 in `specs/004-mixed-material-stages/gate.md` (SC-005, SC-006).
 - [ ] T058 Run `pnpm verify` on a quiet machine (WebKit included) and record the results in gate.md.
-- [ ] T059 [P] Docs: update `CLAUDE.md` (status line), `specs/004-mixed-material-stages/quickstart.md` (final debug API names), and the README's tower description, if present, to the 31-delivery recipe.
+- [X] T059 [P] Docs: update `CLAUDE.md` (status line), `specs/004-mixed-material-stages/quickstart.md` (final debug API names), and the README's tower description, if present, to the 31-delivery recipe.
 - [ ] T060 Manual quickstart scenarios 1–7 and the solo timing (SC-004) are recorded in gate.md. The owner and playtest items (SC-001..003) stay open until done.
 
 ---

@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "generatedAt": "2026-11-04T15:28:01.560Z",
+  "generatedAt": "2026-11-05T03:53:15.101Z",
   "assets": [
     {
       "id": "worker",
@@ -110,9 +110,9 @@
     },
     {
       "id": "clock-tower-stage-1",
-      "file": "clock-tower-stage-1.50dee7f5.glb",
-      "bytes": 17380,
-      "sha256": "50dee7f54941dedc984661ee14f1a889e40fdcbe14109a3603a751724ac165fa",
+      "file": "clock-tower-stage-1.f89d80bd.glb",
+      "bytes": 27024,
+      "sha256": "f89d80bdb980ce3fd93436fcaf500f8d93dec1deee22fd7f0acf7d8cf759bf1a",
       "group": "critical",
       "nodes": [
         "BuildZone",
@@ -122,9 +122,9 @@
     },
     {
       "id": "clock-tower-stage-2",
-      "file": "clock-tower-stage-2.8dfd1552.glb",
-      "bytes": 34348,
-      "sha256": "8dfd15526080086f39e8adc963a7f7a324a9f04e730fa171f0cf9b3149367cce",
+      "file": "clock-tower-stage-2.b31496c6.glb",
+      "bytes": 55900,
+      "sha256": "b31496c683f3544c2e2c811cd119a0c4512a6cee6c1b1a3c9dc67ca78ecca3ab",
       "group": "deferred",
       "nodes": [
         "BuildZone",
@@ -134,9 +134,9 @@
     },
     {
       "id": "clock-tower-stage-3",
-      "file": "clock-tower-stage-3.1539818c.glb",
-      "bytes": 96080,
-      "sha256": "1539818c09c9b457171271252aa8cd8789056a5fd12f6c7f692570ea1a9abe00",
+      "file": "clock-tower-stage-3.808a196f.glb",
+      "bytes": 116592,
+      "sha256": "808a196f5bef60f6db8345b603269025b35a4c17687d78de2d4ded65c504b954",
       "group": "deferred",
       "nodes": [
         "BuildZone",
@@ -146,9 +146,9 @@
     },
     {
       "id": "clock-tower-stage-4",
-      "file": "clock-tower-stage-4.3659f068.glb",
-      "bytes": 131652,
-      "sha256": "3659f06877a3ef28e2b08c3ffdab1eaf49295d5a2dd1f7269c3aa2144afceb86",
+      "file": "clock-tower-stage-4.e85981e0.glb",
+      "bytes": 168328,
+      "sha256": "e85981e0f9ee0aab84484b12c42c853c6f5b5413312b49aad0d319d0e2ebb362",
       "group": "deferred",
       "nodes": [
         "BuildZone",
@@ -158,9 +158,9 @@
     },
     {
       "id": "clock-tower-stage-5",
-      "file": "clock-tower-stage-5.3f0d871f.glb",
-      "bytes": 296516,
-      "sha256": "3f0d871f733806d2504d0c75e8aad1be7b82e271f9c7443650952486311b9d52",
+      "file": "clock-tower-stage-5.123419c1.glb",
+      "bytes": 335760,
+      "sha256": "123419c148d8900b26934320cad1007a0a667e8d775596711a83cc9131ed111d",
       "group": "deferred",
       "nodes": [
         "BuildZone",
@@ -170,9 +170,9 @@
     },
     {
       "id": "clock-tower-stage-6",
-      "file": "clock-tower-stage-6.fd7df269.glb",
-      "bytes": 471556,
-      "sha256": "fd7df2697242969fb95d21238995b7e62f7a7ee4ae1eb1ede229b3963a388c73",
+      "file": "clock-tower-stage-6.aa3a9d18.glb",
+      "bytes": 509732,
+      "sha256": "aa3a9d18e177b4fd9feeb7551e20f2677bc3ce2f4acfe30c8e679e41b6c39762",
       "group": "deferred",
       "nodes": [
         "BuildZone",
@@ -250,9 +250,9 @@
     },
     {
       "id": "clock-tower-stage-1-merged",
-      "file": "clock-tower-stage-1-merged.698a89f4.glb",
-      "bytes": 13388,
-      "sha256": "698a89f40ec265d4dce91d30d5b589baedb390469a8176cdf0873bf07fdfc276",
+      "file": "clock-tower-stage-1-merged.395e740b.glb",
+      "bytes": 21624,
+      "sha256": "395e740b21bf9297a5add7fc7889e407b96ece2b17ad43524ef21826b33fc5f9",
       "group": "deferred",
       "nodes": [
         "ClockTower_Stage1",
@@ -261,9 +261,9 @@
     },
     {
       "id": "clock-tower-lod1-1",
-      "file": "clock-tower-lod1-1.bae38bf0.glb",
-      "bytes": 13304,
-      "sha256": "bae38bf038eaa00f2f3f6b9aff91a6e46339308daa2bbf61c38b3e2610e7cf11",
+      "file": "clock-tower-lod1-1.55686acf.glb",
+      "bytes": 21540,
+      "sha256": "55686acf3cbf485ef0f9da51066233adbdc75321946c1c7fe923fdbea3583146",
       "group": "critical",
       "nodes": [
         "ClockTower_Stage1"
@@ -271,9 +271,9 @@
     },
     {
       "id": "clock-tower-stage-2-merged",
-      "file": "clock-tower-stage-2-merged.f1bb526f.glb",
-      "bytes": 27280,
-      "sha256": "f1bb526f8a5963cf86e3bb66554a9bed16f2ee804a7c0437c0887bc9b1be1d15",
+      "file": "clock-tower-stage-2-merged.c9435876.glb",
+      "bytes": 47356,
+      "sha256": "c94358760b863fbed5094aa8491e797ac09b4d4fc5265336ea16e6a8fb1c3baf",
       "group": "deferred",
       "nodes": [
         "ClockTower_Stage2",
@@ -282,9 +282,9 @@
     },
     {
       "id": "clock-tower-lod1-2",
-      "file": "clock-tower-lod1-2.af7119a0.glb",
-      "bytes": 25776,
-      "sha256": "af7119a0761736766429ca40e48d4c5a52f45ba2d478a3ddb51a3d8b0c516575",
+      "file": "clock-tower-lod1-2.b5a2d4c6.glb",
+      "bytes": 37212,
+      "sha256": "b5a2d4c64a56ae5bbacbddd187940b5a676e4563fb21f8a67eefdb4044fcf0f9",
       "group": "critical",
       "nodes": [
         "ClockTower_Stage2"
@@ -292,9 +292,9 @@
     },
     {
       "id": "clock-tower-stage-3-merged",
-      "file": "clock-tower-stage-3-merged.803441ad.glb",
-      "bytes": 82176,
-      "sha256": "803441ad1bc7efae2ce27cc1013263a055a1b2cf0da4c4e059c1433b836c6447",
+      "file": "clock-tower-stage-3-merged.209a3003.glb",
+      "bytes": 102340,
+      "sha256": "209a3003081bcd62cde9e39d5692d8071684365e2caa7ae9373e1b2cbec77d95",
       "group": "deferred",
       "nodes": [
         "ClockTower_Stage3",
@@ -303,9 +303,9 @@
     },
     {
       "id": "clock-tower-lod1-3",
-      "file": "clock-tower-lod1-3.fba1596b.glb",
-      "bytes": 22380,
-      "sha256": "fba1596b8012bee9c7581929c9cdb2817ddd81daf0631059433c2e121674381b",
+      "file": "clock-tower-lod1-3.714f4cab.glb",
+      "bytes": 23504,
+      "sha256": "714f4cab7e1c5c86052e60f3d12cd559747baafb0f5c547553d40299b8b39dc9",
       "group": "critical",
       "nodes": [
         "ClockTower_Stage3"
@@ -313,9 +313,9 @@
     },
     {
       "id": "clock-tower-stage-4-merged",
-      "file": "clock-tower-stage-4-merged.79ae0868.glb",
-      "bytes": 117732,
-      "sha256": "79ae086813ab21f61cfb549d02a8987a60f5c211528b51db3cc1ed7986591a44",
+      "file": "clock-tower-stage-4-merged.3b21f113.glb",
+      "bytes": 152744,
+      "sha256": "3b21f113dc8db9325e0f70ecbffcd286e77d53c3a987a4efdca4ecebba59fcf3",
       "group": "deferred",
       "nodes": [
         "ClockTower_Stage4",
@@ -324,9 +324,9 @@
     },
     {
       "id": "clock-tower-lod1-4",
-      "file": "clock-tower-lod1-4.4b2f6792.glb",
-      "bytes": 25264,
-      "sha256": "4b2f6792b32a118c95eb8888fc0b6ca60bbae19d87c65dc0e4a74fc4c63e5bd3",
+      "file": "clock-tower-lod1-4.ca4ba83a.glb",
+      "bytes": 25944,
+      "sha256": "ca4ba83a390e8c184d8f6d4f344030645c75046272084713a36701f6397c4038",
       "group": "critical",
       "nodes": [
         "ClockTower_Stage4"
@@ -334,9 +334,9 @@
     },
     {
       "id": "clock-tower-stage-5-merged",
-      "file": "clock-tower-stage-5-merged.bfd27f81.glb",
-      "bytes": 209020,
-      "sha256": "bfd27f81d2eb417e9fb5cea5402aca23ab3d37c38debf73fcaa3de26f39f6529",
+      "file": "clock-tower-stage-5-merged.686240e9.glb",
+      "bytes": 218472,
+      "sha256": "686240e9053cbad171c6545e9dd1da631255f5008ba291f6342f4fe3d5224d3b",
       "group": "deferred",
       "nodes": [
         "ClockTower_Stage5",
@@ -345,9 +345,9 @@
     },
     {
       "id": "clock-tower-lod1-5",
-      "file": "clock-tower-lod1-5.e748c631.glb",
-      "bytes": 36168,
-      "sha256": "e748c631efdf5cc653be7ea6c463f98397fa05c899187f4687babcbb52854331",
+      "file": "clock-tower-lod1-5.6b866fc0.glb",
+      "bytes": 36232,
+      "sha256": "6b866fc02a8bcd265a253899b77a26da730d78d14c02abd3be6b6c3da7011d60",
       "group": "critical",
       "nodes": [
         "ClockTower_Stage5"
@@ -355,9 +355,9 @@
     },
     {
       "id": "clock-tower-stage-6-merged",
-      "file": "clock-tower-stage-6-merged.455f6e7d.glb",
-      "bytes": 163784,
-      "sha256": "455f6e7da7725f2a10a9ffde56436f8e3d3c20a1d5296315a667c50cd16d8e15",
+      "file": "clock-tower-stage-6-merged.ae5e9423.glb",
+      "bytes": 168548,
+      "sha256": "ae5e9423dce5790432b418137346b4d54be614602e5868a6fdeae291faa34b8b",
       "group": "deferred",
       "nodes": [
         "ClockTower_Stage6",
@@ -366,9 +366,9 @@
     },
     {
       "id": "clock-tower-lod1-6",
-      "file": "clock-tower-lod1-6.68e6af18.glb",
-      "bytes": 29940,
-      "sha256": "68e6af1897b6ce511d144f7f816adaf03c26564d431e2e9e3560802f522f05f2",
+      "file": "clock-tower-lod1-6.fc5a2740.glb",
+      "bytes": 30440,
+      "sha256": "fc5a2740f497102684cc579632f7dbc729005cab1981ca27c6f2bbd6e331961a",
       "group": "critical",
       "nodes": [
         "ClockTower_Stage6"
