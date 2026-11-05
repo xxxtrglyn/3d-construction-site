@@ -6,7 +6,7 @@ import { helpersFor } from './world-helpers.ts';
 import { machineHelpersFor } from './machine-helpers.ts';
 
 let server: RunningServer;
-const { S, put, host, dropAt, plotState } = helpersFor(() => server);
+const { S, put, host, dropAt, plotState, filledOf } = helpersFor(() => server);
 const { enter, steps, hold, rec, sys } = machineHelpersFor(() => server);
 afterEach(async () => {
   await server?.close();
@@ -22,7 +22,7 @@ describe('shifts', () => {
     await dropAt(a, d.x, d.z, 'beam');
     await dropAt(o, d.bin.x, d.bin.z, 'brick');
     await dropAt(o, 6, 12, 'cone');
-    await until(() => plotState(plot).filledSlots === 1 && plotState(plot).bin.length === 1);
+    await until(() => filledOf(plot) === 1 && plotState(plot).bin.length === 1);
     const epoch = worldOf(server).state.shift.epoch;
     await sleep(550);
     a.send('dev', { op: 'endShiftIn', seconds: 4 });

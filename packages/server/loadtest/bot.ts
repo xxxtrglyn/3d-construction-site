@@ -1,7 +1,7 @@
 import { Client, type Room } from '@colyseus/sdk';
 import {
   CHAT, CLOCK_TOWER, EMOTE_IDS, MACHINE, MACHINE_KINDS, PROTOCOL_VERSION, QUICK_MESSAGE_IDS, SITE, decodeSnapshot, encodeMoveInputs,
-  entryPoint, generateName, groundworkPart, machineId, neededSupply, openSlots, parkedState, quantizeDir, randomHatColor, seededRng,
+  blueprintById, entryPoint, generateName, groundworkPart, isBlueprintId, machineId, neededSupplies, needsOf, openSlots, palletSize, parkedState, quantizeDir, randomHatColor, seededRng,
   rackAtForks, toolTip,
   type MachineKind, type MoveInput, type OwnMachine, type PieceTypeId, type Rng, type TowerProgress, type WorkerState,
 } from '@hht/shared';
@@ -24,8 +24,10 @@ export interface BotStats {
 
 interface PlotView {
   state: string;
+  blueprintId: string;
   completedStages: number;
-  filledSlots: number;
+  filledA: number;
+  filledB: number;
   joinMode: string;
   crewSize: number;
   hostSession: string;
@@ -59,9 +61,43 @@ interface MachineJob {
 /** The forks are at this rack (shared rule). */
 const rackAtForksNear = (s: ReturnType<typeof toState>, rack: number): boolean => rackAtForks(s, SITE) === rack;
 
-const progressOf = (p: PlotView): TowerProgress => ({
-  blueprintId: CLOCK_TOWER.id, completedStages: p.completedStages, filledSlots: p.filledSlots, groundDug: p.groundDug ?? 0, groundPoured: p.groundPoured ?? 0, highFilled: p.highFilled ?? 0,
-});
+const progressOf = (p: PlotView): TowerProgress => {
+  const blueprintId = isBlueprintId(p.blueprintId) ? p.blueprintId : CLOCK_TOWER.id;
+  const st = blueprintById(blueprintId).stages[p.completedStages];
+  const ab = [p.filledA ?? 0, p.filledB ?? 0];
+  return {
+    blueprintId, completedStages: p.completedStages, filled: st ? st.recipe.map((_, i) => ab[i] ?? 0) : [],
+    groundDug: p.groundDug ?? 0, groundPoured: p.groundPoured ?? 0, highFilled: p.highFilled ?? 0,
+  };
+};
+
+/** feature 004 (research R12): a needed material, weighted by how many are still left, so crews spread over both racks. */
+const pickNeed = (progress: TowerProgress, rng: () => number): PieceTypeId | null => {
+  const sup = neededSupplies(progress);
+  if (sup[0] === 'cement' || sup.length <= 1) return sup[0] ?? null;
+  const needs = needsOf(progress).filter((n) => !n.done);
+  const total = needs.reduce((a, n) => a + n.left, 0);
+  let r = rng() * total;
+  for (const n of needs) {
+    r -= n.left;
+    if (r < 0) return n.type;
+  }
+  return needs[0]?.type ?? null;
+};
+
+/** feature 004: the material that fills the biggest forklift pallet right now. */
+const forkliftNeed = (progress: TowerProgress, mixerBags: number): PieceTypeId | null => {
+  let best: PieceTypeId | null = null;
+  let bn = 0;
+  for (const t of neededSupplies(progress)) {
+    const n = palletSize(progress, t, mixerBags);
+    if (n > bn) {
+      bn = n;
+      best = t;
+    }
+  }
+  return best;
+};
 
 const CHAT_LINES = ['need bricks over here', 'who has beams?', 'nice work crew', 'almost done!', 'stage up!', 'bringing paint', 'lets go', 'thanks!'];
 
@@ -396,7 +432,7 @@ export class Bot {
         if (this.own.carrying) return this.setModeKeep('deliver');
         if (this.mode === 'fetch' && p && p.state === 'building' && !this.wantType && this.planFetch(plot, p)) return;
         const progress = p ? progressOf(p) : null;
-        const type = this.wantType ?? (progress ? neededSupply(progress) ?? 'brick' : 'brick');
+        const type = this.wantType ?? (progress ? pickNeed(progress, this.rng) ?? 'brick' : 'brick');
         this.wantType = type;
         let best = -1;
         let bd = Infinity;
@@ -622,8 +658,8 @@ export class Bot {
     }
   }
 
-  private driveForklift(s: ReturnType<typeof toState>, plot: number, _p: PlotView, progress: TowerProgress, job: MachineJob, now: number, act: (n: string) => void, quit: () => void): void {
-    const need = neededSupply(progress);
+  private driveForklift(s: ReturnType<typeof toState>, plot: number, p: PlotView, progress: TowerProgress, job: MachineJob, now: number, act: (n: string) => void, quit: () => void): void {
+    const need = forkliftNeed(progress, p.mixerBags ?? 0);
     if (process.env.HHT_DEBUG_FORK && now % 2000 < 260) console.log(`[fork ${this.id}] plot=${plot} step=${job.step} load=${s.load.kind} need=${need} pos=${s.x.toFixed(1)},${s.z.toFixed(1)} v=${s.p3.toFixed(2)} t=${((now - job.startedAt) / 1000).toFixed(0)}`);
     const loaded = s.load.kind === 'pallet';
     const def = SITE.plots[plot]!;
@@ -685,7 +721,7 @@ export class Bot {
   }
 
   /** Bot's schema view of the plots (for the divergence check). */
-  plotView(): Array<{ completedStages: number; filledSlots: number; crewSize: number; state: string }> {
-    return this.state.plots.map((p) => ({ completedStages: p.completedStages, filledSlots: p.filledSlots, crewSize: p.crewSize, state: p.state }));
+  plotView(): Array<{ completedStages: number; filledA: number; filledB: number; crewSize: number; state: string }> {
+    return this.state.plots.map((p) => ({ completedStages: p.completedStages, filledA: p.filledA, filledB: p.filledB, crewSize: p.crewSize, state: p.state }));
   }
 }

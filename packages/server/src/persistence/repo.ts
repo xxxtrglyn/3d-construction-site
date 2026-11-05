@@ -1,4 +1,4 @@
-import type { BinEntry, CrewMember, JoinMode, PieceTypeId, PlotStateName, TowerProgress } from '@hht/shared';
+import { blueprintById, isBlueprintId, type BinEntry, type CrewMember, type JoinMode, type PieceTypeId, type PlotStateName, type TowerProgress } from '@hht/shared';
 import type { Db } from './db.ts';
 
 /** Persisted world row (contracts/persistence.sql). */
@@ -71,20 +71,29 @@ export class WorldRepo {
     return this.db.tx(() => {
       for (const t of ['bin_entry', 'crew_member', 'building']) this.db.sql.prepare(`DELETE FROM ${t} WHERE world_id = ? AND epoch <> ?`).run(this.worldId, epoch);
       const rows = this.db.sql.prepare('SELECT * FROM building WHERE world_id = ? AND epoch = ? ORDER BY plot_index').all(this.worldId, epoch) as Array<Record<string, unknown>>;
-      return rows.map((r) => {
+      return rows.flatMap((r) => {
         const plot = r.plot_index as number;
+        const blueprintId = r.blueprint_id as string;
+        if (!isBlueprintId(blueprintId)) {
+          console.warn(`[hht] skipping building ${plot}: unknown blueprint '${blueprintId}'`);
+          return [];
+        }
         const crew = (this.db.sql.prepare('SELECT key_hash, name, hat_color, role, joined_at FROM crew_member WHERE world_id = ? AND plot_index = ? ORDER BY joined_at').all(this.worldId, plot) as Array<Record<string, unknown>>).map(
           (c): CrewMember => ({ keyHash: c.key_hash as string, pid: null, name: c.name as string, hatColor: c.hat_color as string, joinedAt: c.joined_at as number, role: c.role as 'host' | 'member' }),
         );
         const bin = (this.db.sql.prepare('SELECT piece_type, donor_key_hash FROM bin_entry WHERE world_id = ? AND plot_index = ? ORDER BY slot').all(this.worldId, plot) as Array<Record<string, unknown>>).map(
           (b): BinEntry => ({ type: b.piece_type as PieceTypeId, donorKeyHash: b.donor_key_hash as string, donorPid: null }),
         );
-        return {
+        // feature 004: filled_a/filled_b are recipe items 0/1 of the stored blueprint's current stage
+        const completedStages = r.completed_stages as number;
+        const stage = blueprintById(blueprintId).stages[completedStages];
+        const ab = [r.filled_a as number, r.filled_b as number];
+        const row: BuildingRow = {
           plot,
           state: r.state as BuildingRow['state'],
-          blueprintId: r.blueprint_id as string,
+          blueprintId,
           progress: {
-            blueprintId: r.blueprint_id as string, completedStages: r.completed_stages as number, filledSlots: r.filled_slots as number,
+            blueprintId, completedStages, filled: stage ? stage.recipe.map((_, i) => ab[i] ?? 0) : [],
             groundDug: r.ground_dug as number, groundPoured: r.ground_poured as number, highFilled: r.high_filled as number,
           },
           hostKeyHash: (r.host_key_hash as string | null) ?? null,
@@ -96,6 +105,7 @@ export class WorldRepo {
           bin,
           mixerBags: r.mixer_bags as number,
         };
+        return [row];
       });
     });
   }
@@ -104,15 +114,15 @@ export class WorldRepo {
     this.db.tx(() => {
       const s = this.db.sql;
       s.prepare(
-        `INSERT INTO building (world_id, plot_index, epoch, state, blueprint_id, completed_stages, filled_slots, host_key_hash, host_name, join_mode, empty_since, finished_at, updated_at,
+        `INSERT INTO building (world_id, plot_index, epoch, state, blueprint_id, completed_stages, filled_a, filled_b, host_key_hash, host_name, join_mode, empty_since, finished_at, updated_at,
            ground_dug, ground_poured, high_filled, mixer_bags)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(world_id, plot_index) DO UPDATE SET epoch = excluded.epoch, state = excluded.state, blueprint_id = excluded.blueprint_id,
-           completed_stages = excluded.completed_stages, filled_slots = excluded.filled_slots, host_key_hash = excluded.host_key_hash,
+           completed_stages = excluded.completed_stages, filled_a = excluded.filled_a, filled_b = excluded.filled_b, host_key_hash = excluded.host_key_hash,
            host_name = excluded.host_name, join_mode = excluded.join_mode, empty_since = excluded.empty_since, finished_at = excluded.finished_at,
            updated_at = excluded.updated_at, ground_dug = excluded.ground_dug, ground_poured = excluded.ground_poured,
            high_filled = excluded.high_filled, mixer_bags = excluded.mixer_bags`,
-      ).run(this.worldId, b.plot, epoch, b.state, b.blueprintId, b.progress.completedStages, b.progress.filledSlots, b.hostKeyHash, b.hostName, b.joinMode, b.emptySince, b.finishedAt, Date.now(),
+      ).run(this.worldId, b.plot, epoch, b.state, b.blueprintId, b.progress.completedStages, b.progress.filled[0] ?? 0, b.progress.filled[1] ?? 0, b.hostKeyHash, b.hostName, b.joinMode, b.emptySince, b.finishedAt, Date.now(),
         b.progress.groundDug, b.progress.groundPoured, b.progress.highFilled, b.mixerBags);
       s.prepare('DELETE FROM crew_member WHERE world_id = ? AND plot_index = ?').run(this.worldId, b.plot);
       const insC = s.prepare('INSERT OR REPLACE INTO crew_member (world_id, plot_index, key_hash, name, hat_color, role, joined_at, epoch) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');

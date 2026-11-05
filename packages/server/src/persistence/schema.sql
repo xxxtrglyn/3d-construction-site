@@ -1,4 +1,4 @@
--- Contract: SQLite schema for world persistence (feature 002, schema_version 1; feature 003, schema_version 2:
+-- Contract: SQLite schema for world persistence (feature 002, schema_version 1; feature 003, schema_version 2; feature 004, schema_version 3:
 -- specs/003-construction-machines/contracts/persistence-v2.sql — v1 databases are migrated in db.ts)
 -- Engine: node:sqlite (DatabaseSync). PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL; PRAGMA foreign_keys=ON;
 -- Every mutation of a building/crew/bin runs in one transaction in the same server tick (research R6).
@@ -9,7 +9,7 @@ CREATE TABLE IF NOT EXISTS meta (
   key   TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
--- INSERT INTO meta(key, value) VALUES ('schema_version', '2');
+-- INSERT INTO meta(key, value) VALUES ('schema_version', '3');
 
 CREATE TABLE IF NOT EXISTS world (
   world_id          INTEGER PRIMARY KEY,           -- 1, 2, ...
@@ -27,7 +27,8 @@ CREATE TABLE IF NOT EXISTS building (
   state             TEXT    NOT NULL CHECK (state IN ('building', 'unattended', 'finished')),  -- 'free' = no row
   blueprint_id      TEXT    NOT NULL,
   completed_stages  INTEGER NOT NULL CHECK (completed_stages BETWEEN 0 AND 6),
-  filled_slots      INTEGER NOT NULL CHECK (filled_slots >= 0),
+  filled_a          INTEGER NOT NULL CHECK (filled_a >= 0),          -- feature 004 (v3): recipe item 0 of the current stage (was filled_slots)
+  filled_b          INTEGER NOT NULL DEFAULT 0 CHECK (filled_b >= 0), -- feature 004 (v3): recipe item 1 (0 when the stage has one material)
   host_key_hash     TEXT,                          -- NULL when unattended/finished
   host_name         TEXT    NOT NULL,              -- shown on the sign ("Built by ...")
   join_mode         TEXT    NOT NULL CHECK (join_mode IN ('ask', 'open', 'solo')),

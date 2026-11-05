@@ -107,10 +107,10 @@ test('solo: Groundwork with the excavator and the mixer, the crane lifts a roof 
     await expect.poll(async () => (await state(page) as unknown as { plot: { groundwork: { poured: number } } }).plot.groundwork.poured, { timeout: 6000 }).toBe(i);
   }
   expect((await state(page) as unknown as { plot: { groundwork: { done: boolean } } }).plot.groundwork.done).toBe(true);
-  // hand stages by debug shortcut; Roof & Windows: 3 hand panels, then the crane for a roof slot
+  // hand stages by debug shortcut; Roof & Windows (004: panel×4 with 3 high + beam×2): the ordinary panel by hand, then the crane for a roof slot
   await debug(page, 'completeStage');
   await debug(page, 'completeStage');
-  for (let i = 0; i < 3; i++) await debug(page, 'deliver', 'panel');
+  expect(await debug(page, 'deliver', 'panel')).toBe('snapped');
   expect(await debug(page, 'deliver', 'panel')).toBe('tooHigh');
   const roof = spots.highSlots[2]![0]!;
   await lift(page, spots, 'panel', roof);
@@ -118,6 +118,8 @@ test('solo: Groundwork with the excavator and the mixer, the crane lifts a roof 
   // finish to the Masterpiece stage; the bell goes up by crane
   for (let i = 0; i < 3; i++) await debug(page, 'completeStage');
   expect((await state(page)).tower.completedStages).toBe(5);
+  // the Masterpiece needs the decor crate (by hand) and the bell (by crane)
+  expect(await debug(page, 'deliver', 'decor')).toBe('snapped');
   await lift(page, spots, 'bell', spots.highSlots[5]![0]!);
   await expect.poll(async () => (await state(page)).tower.isMasterpiece, { timeout: 5000 }).toBe(true);
   expect(net).toEqual([]);

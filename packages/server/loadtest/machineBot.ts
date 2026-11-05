@@ -76,7 +76,7 @@ export type CraneGoal = { kind: 'grab'; x: number; z: number } | { kind: 'releas
 export function craneGoal(s: MachineState, plot: number, progress: TowerProgress, loose: Array<{ type: string; x: number; z: number }>): CraneGoal {
   const spots = SITE.machines[plot]!;
   if (s.load.kind === 'hook') {
-    const slots = openSlotRefs(SITE.plots[plot]!, spots, progress, CLOCK_TOWER).filter((x) => x.type === (s.load as { piece: PieceTypeId }).piece);
+    const slots = openSlotRefs(SITE.plots[plot]!, spots, progress).filter((x) => x.type === (s.load as { piece: PieceTypeId }).piece);
     const best = slots.sort((a, b) => Number(b.high) - Number(a.high))[0];
     if (best) {
       const h = hookPos(s, spots);

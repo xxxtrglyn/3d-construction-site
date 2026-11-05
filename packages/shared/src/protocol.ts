@@ -9,8 +9,11 @@ import { PIECE_TYPE_IDS, type PieceTypeId } from './pieces.ts';
 import type { Via } from './progression.ts';
 import { isEmoteId, isQuickMessageId, type EmoteId, type QuickMessageId } from './social.ts';
 
-/** v2 (feature 003): machines — 4-bit carry codes, input act/alt bits, machine records, ownMachine. */
-export const PROTOCOL_VERSION = 2;
+/**
+ * v2 (feature 003): machines — 4-bit carry codes, input act/alt bits, machine records, ownMachine.
+ * v3 (feature 004): mixed-material stages — PlotState filledA/filledB, need lists in hints.
+ */
+export const PROTOCOL_VERSION = 3;
 
 export const CLOSE = {
   protocol: 4001,
@@ -183,7 +186,12 @@ export type MachineEnterResult = 'entered' | 'notCrew' | 'busy' | 'handsFull' | 
 export type MachineExitReason = 'jump' | 'idle' | 'leftCrew' | 'disconnect' | 'shiftReset';
 export type MachineActKind = 'scoop' | 'dump' | 'dumpBack' | 'hookGrab' | 'hookRelease' | 'palletLoad' | 'palletUnload' | 'mixStart' | 'mixDone';
 export type HintEvent =
-  | { kind: 'wrongPiece'; needed: PieceTypeId }
+  /** feature 004: `needed` = every material the stage still needs (recipe order; may be empty) */
+  | { kind: 'wrongPiece'; needed: PieceTypeId[] }
+  /** feature 004: the material is in the recipe but complete */
+  | { kind: 'surplus'; type: PieceTypeId; needed: PieceTypeId[] }
+  /** feature 004: the bin refuses a donation the plot does not need (FR-018) */
+  | { kind: 'binNotNeeded'; type: PieceTypeId; needed: PieceTypeId[] }
   | { kind: 'notCrew' }
   | { kind: 'binFull' }
   | { kind: 'groundworkFirst'; part: 'dig' | 'concrete' }

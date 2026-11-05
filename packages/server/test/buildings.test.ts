@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { SITE, CLOCK_TOWER } from '@hht/shared';
+import { SITE, CLOCK_TOWER, TOTAL_DELIVERIES, filledTotal, needsOf } from '@hht/shared';
 import type { RunningServer } from '../src/server.ts';
 import { boot, joinPlayer, sleep, until, worldOf, type Player } from './helpers.ts';
 
@@ -21,6 +21,9 @@ const skipGroundwork = (plot = 0) => {
   b.progress = { ...b.progress, groundDug: 6, groundPoured: 4 };
   sys.syncPlot(plot);
 };
+const progress = (plot = 0) => worldOf(server).systems.plots[plot]!.progress;
+/** feature 004: the first recipe material of the current stage that still has a hand slot */
+const handNeed = (plot = 0) => needsOf(progress(plot)).find((n) => !n.done && !n.craneOnly)!.type;
 /** Stand in the plot's build zone and drop `type` there. */
 const deliverTo = async (p: Player, plot: number, type: string) => {
   const d = SITE.plots[plot]!;
@@ -79,7 +82,7 @@ describe('Foreman and buildings', () => {
     await until(() => S(a).crewPlot === -1, 3000);
     expect(worldOf(server).state.plots[0]!.state).toBe('finished'); // stays standing
     const snaps = b.events.filter((e) => e.type === 'snap');
-    expect(snaps.length).toBe(30);
+    expect(snaps.length).toBe(TOTAL_DELIVERIES); // 31 (feature 004 recipes)
     await a.leave();
     await b.leave();
   });
@@ -94,13 +97,13 @@ describe('Foreman and buildings', () => {
     skipGroundwork();
     await deliverTo(a, 0, 'bell');
     const h = await a.waitFor('hint');
-    expect(h).toEqual({ kind: 'wrongPiece', needed: 'beam' });
+    expect(h).toEqual({ kind: 'wrongPiece', needed: CLOCK_TOWER.stages[0]!.recipe.map((r) => r.type) }); // ['beam', 'brick']
     await sleep(100);
     expect(b.events.some((e) => e.type === 'hint')).toBe(false);
     const pc = [...worldOf(server).systems.pieces.values()][0]!;
     const d = SITE.plots[0]!;
     expect(Math.hypot(pc.x - d.x, pc.z - d.z)).toBeCloseTo(d.buildZoneRadius + 1.5, 3);
-    expect(worldOf(server).state.plots[0]!.filledSlots).toBe(0);
+    expect(worldOf(server).state.plots[0]!).toMatchObject({ filledA: 0, filledB: 0 });
     await a.leave();
     await b.leave();
   });
@@ -112,18 +115,27 @@ describe('Foreman and buildings', () => {
     a.send('foreman', { op: 'start', blueprint: 'clock-tower' });
     await a.waitFor('foreman');
     skipGroundwork();
-    for (let i = 0; i < 5; i++) {
-      await deliverTo(a, 0, 'beam');
+    // the Frame recipe up to its last slot (feature 004: beams and bricks)
+    for (let i = 0; i < CLOCK_TOWER.stages[0]!.slotCount - 1; i++) {
+      const before = filledTotal(progress());
+      await deliverTo(a, 0, handNeed());
+      await until(() => filledTotal(progress()) === before + 1);
       await sleep(150);
     }
-    // two beams for one remaining frame slot: the first completes the stage, the second is a wrong piece (needs bricks)
-    await deliverTo(a, 0, 'beam');
-    await deliverTo(a, 0, 'beam');
+    // two pieces of the last material for one remaining frame slot: the first completes the stage,
+    // the second fills one slot of Walls & Floors (which uses that material too), in that order
+    const last = handNeed();
+    expect(needsOf(progress()).filter((n) => !n.done)).toEqual([expect.objectContaining({ type: last, left: 1 })]);
+    await deliverTo(a, 0, last);
+    await deliverTo(a, 0, last);
     await sleep(100);
     const plot = worldOf(server).state.plots[0]!;
     expect(plot.completedStages).toBe(1);
-    expect(plot.filledSlots).toBe(0);
-    expect(a.events.filter((e) => e.type === 'hint')).toHaveLength(1);
+    const walls = CLOCK_TOWER.stages[1]!.recipe.findIndex((r) => r.type === last);
+    expect(progress().filled).toEqual(CLOCK_TOWER.stages[1]!.recipe.map((_, i) => (i === walls ? 1 : 0)));
+    expect(filledTotal(progress())).toBe(1);
+    expect(a.events.filter((e) => e.type === 'hint')).toHaveLength(0);
+    expect(worldOf(server).systems.audit.overfilledSlots).toBe(0);
     await a.leave();
   });
 
@@ -137,7 +149,8 @@ describe('Foreman and buildings', () => {
     skipGroundwork();
     await deliverTo(b, 0, 'beam');
     await sleep(100);
-    expect(worldOf(server).state.plots[0]!.filledSlots).toBe(0);
+    expect(worldOf(server).state.plots[0]!).toMatchObject({ filledA: 0, filledB: 0 });
+    expect(filledTotal(progress())).toBe(0);
     await a.leave();
     await b.leave();
   });
@@ -150,9 +163,11 @@ describe('Foreman and buildings', () => {
     await a.waitFor('foreman');
     skipGroundwork();
     await deliverTo(a, 0, 'beam');
-    await until(() => worldOf(server).state.plots[0]!.filledSlots === 1);
-    const row = server.ctx.db.sql.prepare('SELECT filled_slots, state, join_mode FROM building WHERE world_id = 1 AND plot_index = 0').get() as Record<string, unknown>;
-    expect(row).toEqual({ filled_slots: 1, state: 'building', join_mode: 'ask' });
+    await until(() => worldOf(server).state.plots[0]!.filledA === 1);
+    await deliverTo(a, 0, 'brick');
+    await until(() => worldOf(server).state.plots[0]!.filledB === 1);
+    const row = server.ctx.db.sql.prepare('SELECT blueprint_id, filled_a, filled_b, state, join_mode FROM building WHERE world_id = 1 AND plot_index = 0').get() as Record<string, unknown>;
+    expect(row).toEqual({ blueprint_id: 'clock-tower', filled_a: 1, filled_b: 1, state: 'building', join_mode: 'ask' });
     const crew = server.ctx.db.sql.prepare('SELECT role FROM crew_member WHERE world_id = 1').all();
     expect(crew).toEqual([{ role: 'host' }]);
     await a.leave();

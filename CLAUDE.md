@@ -50,12 +50,15 @@ Server env: `HHT_PORT`, `HHT_DB`, `HHT_SHIFT_MINUTES`, `HHT_MAX_PLAYERS`, `HHT_M
 Status: feature 001 is done (gate in `specs/001-single-player-prototype/gate.md`). Feature 002 is
 implemented (gate in `specs/002-multiplayer-core/gate.md`, automated items pass). Feature 003 is
 implemented (gate in `specs/003-construction-machines/gate.md`; protocol v2, database schema v2;
-owner, device and playtest items open). Music and machine sounds: `tools/audio/generate-audio.mjs`
+owner, device and playtest items open). Feature 004 (mixed-material stages) is being implemented
+(gate in `specs/004-mixed-material-stages/gate.md`; protocol v3, database schema v3: old towers keep
+blueprint `clock-tower-v1`). Music and machine sounds: `tools/audio/generate-audio.mjs`
 (ElevenLabs; the key comes from `ELEVENLABS_API_KEY`, never committed).
 
 ## Rules of thumb
 
-- Game rules go in `packages/shared` as pure functions with unit tests.
+- Game rules go in `packages/shared` as pure functions with unit tests. Stage needs come from
+  `needsOf()` and its text from `client/src/ui/needsText.ts` only (feature 004).
 - Multiplayer is server-authoritative. Clients send only inputs and intents (`shared/protocol.ts`).
   Movement uses only the deterministic `stepWorker()` (`shared/kinematics.ts`) on both sides, so
   never add client-only movement code. Server systems orchestrate; rules stay pure.

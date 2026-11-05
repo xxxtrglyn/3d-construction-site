@@ -1,3 +1,5 @@
+import type { Need } from '@hht/shared';
+import { chipsHtml, chipsText } from './needsText.ts';
 import { button } from './screens.ts';
 import './hud.css';
 import './net.css';
@@ -25,6 +27,8 @@ export class NetHud {
   private readonly fps: HTMLDivElement;
   private readonly hideChatBtn: HTMLButtonElement;
   private toastTimer = 0;
+  private crewNeeds: HTMLDivElement | null = null;
+  private crewNeedsHtml = '';
   private chipHtml = '';
   private promptText = '';
   menuOpen = false;
@@ -99,6 +103,25 @@ export class NetHud {
       this.chip.innerHTML = html;
       this.chipHtml = html;
     }
+  }
+
+  /**
+   * feature 004 (FR-013): a crew member's own-plot needs, fixed at the top of the screen in multiplayer
+   * ("Your tower · Frame: ● Beams 3 · ● Bricks ✓"); null hides it. Re-renders only when the text changes.
+   */
+  setCrewNeeds(stageName: string | null, needs: readonly Need[] | null, line?: string): void {
+    if (!this.crewNeeds) {
+      this.crewNeeds = document.createElement('div');
+      this.crewNeeds.className = 'hud-crewneeds hidden';
+      this.crewNeeds.dataset.testid = 'crew-needs';
+      this.root.appendChild(this.crewNeeds);
+    }
+    const html = !stageName && !line ? '' : `<span class="who">Your tower${stageName ? ` · ${stageName}` : ''}</span>${needs?.length ? `<span class="needs">${chipsHtml(needs)}</span>` : line ? `<span>${line}</span>` : ''}`;
+    if (html === this.crewNeedsHtml) return;
+    this.crewNeedsHtml = html;
+    this.crewNeeds.classList.toggle('hidden', !html);
+    this.crewNeeds.innerHTML = html;
+    this.crewNeeds.setAttribute('aria-label', needs?.length ? chipsText(needs) : (line ?? ''));
   }
 
   showToast(text: string, seconds = 2.4): void {

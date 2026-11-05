@@ -1,7 +1,7 @@
 import {
   CHAT, CLOCK_TOWER, INTERACT, MACHINE, NET, PIECE_TYPE_IDS, SITE, SOCIAL,
-  addToBin, arcPosition, assignPlot, becomesUnattended, canBin, currentStage, deliver, detectContact, dropPoint, groundworkDone,
-  groundworkPart, hostOf, initialProgress, inPlaza, isMasterpiece, maskBlocked, neededPiece, neededSupply, nextHost, normalizeForMatch,
+  addToBin, arcPosition, assignPlot, becomesUnattended, binAccepts, blueprintOf, currentStage, deliver, detectContact, dropPoint, groundworkDone,
+  groundworkPart, hostOf, initialProgress, inPlaza, isMasterpiece, maskBlocked, neededSupplies, needsOf, nextHost, normalizeForMatch,
   plotAtBin, plotAtZone, pour, removeMember, requestJoin, sanitize, setDownSpot, setHost, shiftPhase, shouldHandOver, takeFromBin, tossArc,
   towerBlocker,
   type Arc, type BinEntry, type ClientMessageType, type ClientMessages, type CrewMember, type CrewRecord, type JoinMode, type MachineId,
@@ -276,7 +276,7 @@ export class WorldSystems {
     const b = this.plots[target.plot];
     const def = SITE.plots[target.plot];
     if (!b || !def || s.crewPlot !== target.plot || Math.hypot(def.bin.x - w.x, def.bin.z - w.z) > def.bin.radius + LOOSE_REACH) return this.bad(s, now);
-    const e = takeFromBin(b.bin, neededSupply(b.progress) ?? neededPiece(b.progress));
+    const e = takeFromBin(b.bin, neededSupplies(b.progress));
     if (!e) return;
     this.setHeld(s, e.type);
     this.syncPlot(b.plot);
@@ -463,7 +463,7 @@ export class WorldSystems {
       // the footing accepts concrete once the pit is dug (FR-021)
       if (this.pourConcrete(actor as Session, zb, now)) return;
       const part = groundworkPart(zb.progress);
-      if (actor) this.room.sendTo(actor, 'hint', part === 'dig' ? { kind: 'groundworkFirst', part: 'dig' } : { kind: 'wrongPiece', needed: neededPiece(zb.progress) ?? 'beam' });
+      if (actor) this.room.sendTo(actor, 'hint', part === 'dig' ? { kind: 'groundworkFirst', part: 'dig' } : { kind: 'wrongPiece', needed: neededSupplies(zb.progress) });
       return this.pushOut(zb.plot, type, x, z, now, actor);
     }
     if (zone >= 0 && zb && isCrew && zb.state === 'building' && type !== 'cone' && type !== 'cement') {
@@ -473,22 +473,27 @@ export class WorldSystems {
     if (zone >= 0 && zb && isCrew) {
       // wrong piece (or the tower is finished): bounce out with a hint for the actor only
       const part = groundworkPart(zb.progress);
-      const needed = neededPiece(zb.progress);
       if (actor && part && zb.state === 'building') this.room.sendTo(actor, 'hint', { kind: 'groundworkFirst', part });
-      else if (actor && needed) this.room.sendTo(actor, 'hint', { kind: 'wrongPiece', needed });
+      else if (actor && zb.state === 'building') this.room.sendTo(actor, 'hint', { kind: 'wrongPiece', needed: neededSupplies(zb.progress) });
       return this.pushOut(zb.plot, type, x, z, now, actor);
     }
     const target = binPlot >= 0 && this.plots[binPlot] ? binPlot : zone;
     const tb = target >= 0 ? this.plots[target] : null;
     if (tb) {
-      if (canBin(type, CLOCK_TOWER) && tb.state !== 'finished' && addToBin(tb.bin, { type, donorKeyHash: actor?.keyHash ?? '', donorPid: actor?.pid ?? null }, this.cfg.binCapacity)) {
+      // feature 004 (FR-018): only what the plot still needs, beyond what is already binned
+      const refusal = tb.state === 'finished' ? 'notBinnable' : binAccepts(type, tb.progress, tb.bin, blueprintOf(tb.progress), this.cfg.binCapacity);
+      if (!refusal && addToBin(tb.bin, { type, donorKeyHash: actor?.keyHash ?? '', donorPid: actor?.pid ?? null }, this.cfg.binCapacity)) {
         if (actor) actor.donated++;
         this.syncPlot(tb.plot);
         this.saveBuilding(tb);
         this.room.broadcastEvent('binned', { plot: tb.plot, by: actor?.pid ?? '' });
         return;
       }
-      if (actor) this.room.sendTo(actor, 'hint', canBin(type, CLOCK_TOWER) && tb.state !== 'finished' ? { kind: 'binFull' } : { kind: 'notCrew' });
+      if (actor) {
+        this.room.sendTo(actor, 'hint', refusal === 'full' ? { kind: 'binFull' }
+          : refusal === 'notNeeded' ? { kind: 'binNotNeeded', type, needed: neededSupplies(tb.progress).filter((t) => t !== 'cement' || type === 'cement') }
+          : { kind: 'notCrew' });
+      }
       return this.pushOut(tb.plot, type, x, z, now, actor);
     }
     this.addPiece(type, x, 0, z, now, actor?.pid ?? '', null);
@@ -514,12 +519,13 @@ export class WorldSystems {
 
   /**
    * One delivery through the shared rules (`via` hand, forklift or crane). On refusal the piece goes
-   * beside the plot (groundworkFirst, wrongPiece) or to the foot of the tower (tooHigh) with a hint,
-   * unless `quiet` (the forklift places its own leftovers). Returns true when a slot was filled.
+   * beside the plot (groundworkFirst, wrongPiece, surplus) or to the foot of the tower (tooHigh) with
+   * a hint, unless `quiet` (the forklift places its own leftovers). Returns true when a slot was filled.
+   * Deliveries run one at a time in the room, so the second of two "last" pieces is surplus (FR-009).
    */
   deliverPiece(s: Session, b: Building, type: PieceTypeId, _x: number, _z: number, now: number, via: Via = 'hand', slot?: { high: boolean }, quiet = false): boolean {
     if (s.crewPlot !== b.plot) this.audit.nonCrewSnaps++;
-    const { progress, result } = deliver(b.progress, type, via, slot, CLOCK_TOWER);
+    const { progress, result } = deliver(b.progress, type, via, slot);
     if (result === 'groundworkFirst') {
       if (quiet) return false;
       this.room.sendTo(s, 'hint', { kind: 'groundworkFirst', part: groundworkPart(b.progress) ?? 'dig' });
@@ -535,17 +541,18 @@ export class WorldSystems {
       this.addPiece(type, at.x, 0, at.z, now, s.pid, null);
       return false;
     }
-    if (result === 'wrongPiece' || result === 'alreadyComplete') {
+    if (result === 'wrongPiece' || result === 'surplus' || result === 'alreadyComplete') {
       if (quiet) return false;
-      const needed = neededPiece(b.progress);
-      if (needed) this.room.sendTo(s, 'hint', { kind: 'wrongPiece', needed });
+      const needed = neededSupplies(b.progress);
+      if (result === 'surplus') this.room.sendTo(s, 'hint', { kind: 'surplus', type, needed });
+      else if (result === 'wrongPiece') this.room.sendTo(s, 'hint', { kind: 'wrongPiece', needed });
       this.pushOut(b.plot, type, _x, _z, now, s);
       return false;
     }
     if (via !== 'crane' && (progress.highFilled > b.progress.highFilled)) this.machines.audit.highFilledByHand++;
     b.progress = progress;
-    const st = currentStage(progress, CLOCK_TOWER);
-    if (st && progress.filledSlots >= st.slotCount) this.audit.overfilledSlots++;
+    const st = currentStage(progress);
+    if (st && st.recipe.some((r, i) => (progress.filled[i] ?? 0) > r.count)) this.audit.overfilledSlots++;
     s.delivered++;
     if (result === 'masterpiece') {
       b.state = 'finished';
@@ -664,7 +671,8 @@ export class WorldSystems {
       ps.state = 'free';
       ps.blueprintId = '';
       ps.completedStages = 0;
-      ps.filledSlots = 0;
+      ps.filledA = 0;
+      ps.filledB = 0;
       ps.hostName = '';
       ps.hostSession = '';
       ps.joinMode = 'ask';
@@ -683,7 +691,8 @@ export class WorldSystems {
     ps.state = b.state;
     ps.blueprintId = b.blueprintId;
     ps.completedStages = b.progress.completedStages;
-    ps.filledSlots = b.progress.filledSlots;
+    ps.filledA = b.progress.filled[0] ?? 0;
+    ps.filledB = b.progress.filled[1] ?? 0;
     ps.hostName = b.hostName;
     ps.hostSession = host?.pid ?? '';
     ps.joinMode = b.crew.joinMode;
@@ -1101,23 +1110,30 @@ export class WorldSystems {
         }
         return;
       }
-      case 'fillStage': {
+      case 'fillStage':
+      case 'fillMaterial': {
+        // every recipe material of the current stage (high slots as crane fills), or one material's ordinary slots
         const b = this.plots[Number(m.plot)];
         if (!b || b.state !== 'building') return;
-        const stage = currentStage(b.progress, CLOCK_TOWER);
-        if (!stage) return;
-        if (!groundworkDone(b.progress)) b.progress = { ...b.progress, groundDug: CLOCK_TOWER.groundwork.scoops, groundPoured: CLOCK_TOWER.groundwork.concrete };
+        const bp = blueprintOf(b.progress);
+        if (!currentStage(b.progress)) return;
+        if (!groundworkDone(b.progress)) b.progress = { ...b.progress, groundDug: bp.groundwork.scoops, groundPoured: bp.groundwork.concrete };
+        const only = m.op === 'fillMaterial' && typeof m.type === 'string' ? m.type : null;
         const start = b.progress.completedStages;
+        const d = SITE.plots[b.plot]!;
         for (let i = 0; i < 40 && b.progress.completedStages === start && !isMasterpiece(b.progress); i++) {
-          const high = b.progress.filledSlots - b.progress.highFilled >= stage.slotCount - stage.highSlots;
-          this.deliverPiece(s, b, stage.pieceType, SITE.plots[b.plot]!.x, SITE.plots[b.plot]!.z, now, high ? 'crane' : 'hand', { high });
+          const n = needsOf(b.progress).find((x) => !x.done && (!only || x.type === only));
+          if (!n || (only && n.craneOnly)) break;
+          const high = n.craneOnly;
+          this.deliverPiece(s, b, n.type, d.x, d.z, now, high ? 'crane' : 'hand', { high }, true);
         }
         return;
       }
       case 'fillGround': {
         const b = this.plots[Number(m.plot)];
         if (!b || groundworkDone(b.progress)) return;
-        b.progress = { ...b.progress, groundDug: CLOCK_TOWER.groundwork.scoops, groundPoured: CLOCK_TOWER.groundwork.concrete };
+        const gw = blueprintOf(b.progress).groundwork;
+        b.progress = { ...b.progress, groundDug: gw.scoops, groundPoured: gw.concrete };
         this.saveBuilding(b);
         this.syncPlot(b.plot);
         this.emitGround(b);

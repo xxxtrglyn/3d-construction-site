@@ -42,13 +42,14 @@ type HintEvent =
 - `needed` is in recipe order, only materials with `left > 0`, possibly empty (stage just completed).
 - The bin refusal uses `{ kind: 'binNotNeeded', type, needed }` (new) instead of the generic
   `notCrew` / `binFull` when the reason is demand (FR-018); `binFull` stays for a full bin.
-- Validation (`validateHint` in shared) rejects unknown types and arrays longer than 2.
+- Server → client events are trusted and have no runtime validators (as in v1/v2); the union is
+  type-checked in `shared/protocol.ts`.
 
 ### `snap`
 
-Unchanged (`{ plot, slot, pieceType, via }`); `slot` is now the per-material index of the SlotRef
-(data-model §6). Clients that animate the snap look the slot up with `openSlotRefs()` before applying
-the patch.
+Unchanged (`{ plot, result, by, pieceType, via }`). Multiplayer pieces do not fly to slots (the server
+removes a delivered piece), so no slot index is needed; ghosts update from the `filledA/filledB` patch.
+Solo animates its own flights with the typed layout (`TowerPlot.handSlotIndex`).
 
 ## Dev cheats (`HHT_DEV_CHEATS=1`)
 

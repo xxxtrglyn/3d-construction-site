@@ -1,12 +1,13 @@
 import * as THREE from 'three';
 import {
   CHAT, CLOCK_TOWER, HAT_COLORS, INTERACT, MACHINE, MACHINE_KINDS, PIECE_TYPES, SITE, atPit, atSpoil, entryPoint, groundworkPart, hookPos,
-  isEmoteId, isPieceTypeId, neededSupply, openSlotRefs, openSlots, plotOfMachine, rackAtForks, snapTarget,
+  currentStage, isEmoteId, isPieceTypeId, neededSupplies, needsOf, openSlotRefs, palletSize, plotOfMachine, rackAtForks, snapTarget,
   type EmoteId, type MachineKind, type PieceTypeId, type QuickMessageId, type ServerEvents, type SlotRef,
 } from '@hht/shared';
 import { progressOf } from '../net/connection.ts';
 import type { SampleId } from '../audio/sfx.ts';
 import { MachineHints } from '../ui/machineHints.ts';
+import { hintLine } from '../ui/needsText.ts';
 import type { CrowdPose } from '../crowd/animation.ts';
 import type { NetConnection } from '../net/connection.ts';
 import type { WorkerPose } from '../player/workerView.ts';
@@ -153,10 +154,10 @@ export class NetPlay extends NetGame {
     conn.on('celebrate', (e) => this.world.onCelebrate(e, this.conn.clock.serverNow()));
     conn.on('hint', (h) => {
       this.sfx.play('wrong');
-      if (h.kind === 'wrongPiece') this.hud.showToast(`Needs: ${PIECE_TYPES[h.needed].label}`);
+      const line = hintLine(h, this.myStageName());
+      if (line) this.hud.showToast(line, h.kind === 'tooHigh' ? 2.6 : 2.4);
       else if (h.kind === 'binFull') this.hud.showToast('That supply bin is full');
       else if (h.kind === 'groundworkFirst') this.hud.showToast(h.part === 'dig' ? 'Dig the foundation first' : 'Pour the footing first', 2.6);
-      else if (h.kind === 'tooHigh') this.hud.showToast('Too high: use the crane', 2.6);
       else if (h.kind === 'crewOnlyMachine') this.hud.showToast('Crew only');
       else if (h.kind === 'mixerFull') this.hud.showToast('Mixer is full');
       else this.hud.showToast('Only this crew can build here');
@@ -287,6 +288,22 @@ export class NetPlay extends NetGame {
     return this.conn.state.players.get(this.me)?.crewPlot ?? -1;
   }
 
+  /** The current stage name of the player's own tower (hint texts), or null. */
+  private myStageName(): string | null {
+    const pv = this.conn.state.plots[this.myPlot()];
+    return pv && pv.state === 'building' ? (currentStage(progressOf(pv))?.name ?? null) : null;
+  }
+
+  /** feature 004 (FR-013): the own-plot needs pill, the same chips as the plot sign. */
+  private updateCrewNeeds(): void {
+    const pv = this.conn.state.plots[this.myPlot()];
+    if (!pv || pv.state !== 'building') return this.hud.setCrewNeeds(null, null);
+    const progress = progressOf(pv);
+    const part = groundworkPart(progress);
+    if (part) return this.hud.setCrewNeeds('Groundwork', null, part === 'dig' ? '🚜 dig the pit: use the excavator' : '🥣 pour the footing: use the mixer');
+    this.hud.setCrewNeeds(currentStage(progress)?.name ?? null, needsOf(progress));
+  }
+
   private setGuide(plot: number): void {
     const d = SITE.plots[plot];
     if (d) this.guide = new THREE.Vector3(d.sign.x, 3.2, d.sign.z);
@@ -390,7 +407,7 @@ export class NetPlay extends NetGame {
         }
         break;
       case 'foreman':
-        this.foremanDialog.open(st, this.myPlot() >= 0);
+        this.foremanDialog.open(st, this.myPlot());
         this.actions.releaseAll();
         break;
       case 'sign':
@@ -512,11 +529,8 @@ export class NetPlay extends NetGame {
         if (s.load.kind === 'pallet') return { text: `Unload ${s.load.pieces.length} ${PLURAL[s.load.pieces[0] ?? 'brick']}`, disabled: false };
         const rack = SITE.racks[rackAtForks(s, SITE)];
         if (!rack) return { text: 'Drive to a rack', disabled: true };
-        if (!progress || neededSupply(progress) !== rack.type) return { text: `${PIECE_TYPES[rack.type].label}: not needed`, disabled: true };
-        const open = openSlots(progress);
-        const n = rack.type === 'cement'
-          ? Math.min(MACHINE.forklift.palletMax, CLOCK_TOWER.groundwork.concrete - progress.groundPoured - (pv?.mixerBags ?? 0))
-          : Math.min(MACHINE.forklift.palletMax, open.hand > 0 ? open.hand : open.high);
+        if (!progress || !neededSupplies(progress).includes(rack.type)) return { text: `${PIECE_TYPES[rack.type].label}: not needed`, disabled: true };
+        const n = palletSize(progress, rack.type, pv?.mixerBags ?? 0);
         return n > 0 ? { text: `Load ${n} ${PLURAL[rack.type]}`, disabled: false } : { text: 'Nothing needed', disabled: true };
       }
       case 'crane':
@@ -599,6 +613,7 @@ export class NetPlay extends NetGame {
     if (this.myPlot() < 0 || st.players.get(this.me)?.crewRole !== 'host') this.requestCards.clear();
     this.shiftBanner.update(st.shift.phase, st.shift.endsAt, serverNow);
     this.chatUi.update();
+    this.updateCrewNeeds();
     this.chatUi.setCrewAvailable(this.myPlot() >= 0);
     this.chatUi.setHidden(this.profile.get().hideAllChat);
     if (this.foremanDialog.isOpen && Math.hypot(this.position.x - SITE.foreman.x, this.position.z - SITE.foreman.z) > SITE.foreman.talkRadius + 1.5) this.foremanDialog.close();

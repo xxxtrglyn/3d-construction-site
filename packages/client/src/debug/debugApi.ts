@@ -1,5 +1,5 @@
 import * as THREE from 'three';
-import { MACHINE_KINDS, PIECE_TYPE_IDS, type DeliverResult, type MachineKind, type PieceTypeId } from '@hht/shared';
+import { MACHINE_KINDS, PIECE_TYPE_IDS, needsOf, type DeliverResult, type MachineKind, type PieceTypeId } from '@hht/shared';
 import type { Game, GameEvent } from '../game/Game.ts';
 import { QUALITY } from '../render/quality.ts';
 import { setupPerfScene } from './perfScene.ts';
@@ -62,7 +62,10 @@ export function installDebugApi(game: Game, ready: Promise<void>, params: URLSea
         worker: { position: [p.x, p.y, p.z], grounded: game.controller.grounded, holding: game.pieces.held()?.type ?? null },
         tower: {
           completedStages: game.plot.progress.completedStages,
-          filledSlots: game.plot.progress.filledSlots,
+          filled: [...game.plot.progress.filled],
+          filledSlots: game.plot.progress.filled.reduce((a, b) => a + b, 0),
+          needs: needsOf(game.plot.progress),
+          ghosts: Object.fromEntries(game.ghosts.counts),
           stars: game.plot.stars,
           isMasterpiece: game.plot.masterpiece,
         },

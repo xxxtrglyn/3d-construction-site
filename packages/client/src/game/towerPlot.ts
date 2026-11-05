@@ -7,8 +7,12 @@ import {
   groundworkDone,
   groundworkPart,
   initialProgress,
+  highItem,
   isMasterpiece,
   neededPiece,
+  neededSupplies,
+  needsOf,
+  openSlotsOf,
   pour,
   reset as resetProgress,
   starsOf,
@@ -20,12 +24,13 @@ import {
 import { BUILD_ZONE_RADIUS, TOWER_HALF } from '../world/layout.ts';
 import type { Piece, PieceManager } from './pieceManager.ts';
 
-/** Why a delivery was refused (feature 003 adds Groundwork and high slots). */
-export type RefuseReason = 'wrongPiece' | 'groundworkFirst' | 'tooHigh';
+/** Why a delivery was refused (feature 003 adds Groundwork and high slots, 004 surplus). */
+export type RefuseReason = 'wrongPiece' | 'groundworkFirst' | 'tooHigh' | 'surplus';
 
 export interface PlotEvents {
   onSnap(piece: Piece | null, result: DeliverResult, progress: TowerProgress): void;
-  onWrong(piece: Piece | null, needed: PieceTypeId | null, reason?: RefuseReason): void;
+  /** feature 004: `needed` = every material the stage still needs (recipe order); `type` = the refused piece */
+  onWrong(piece: Piece | null, needed: PieceTypeId[], reason: RefuseReason, type: PieceTypeId): void;
   /** feature 003: a scoop counted or a bucket was poured (`done` = Groundwork complete) */
   onGround?(progress: TowerProgress, done: boolean): void;
   /** fired after the last piece of a stage lands */
@@ -44,6 +49,7 @@ export class TowerPlot {
   constructor(
     readonly center: THREE.Vector3,
     private readonly pieces: PieceManager,
+    /** arc position of hand slot `i` of the current stage (materials in recipe order, see `handSlotIndex`) */
     private readonly slotPos: (i: number) => THREE.Vector3,
     private readonly events: PlotEvents,
   ) {}
@@ -54,8 +60,13 @@ export class TowerPlot {
   get masterpiece(): boolean {
     return isMasterpiece(this.progress);
   }
+  /** the stage's main material (null at the Masterpiece) */
   get needed(): PieceTypeId | null {
     return neededPiece(this.progress);
+  }
+  /** feature 004: every material still needed now (recipe order) */
+  get neededAll(): PieceTypeId[] {
+    return neededSupplies(this.progress);
   }
   get stage() {
     return currentStage(this.progress);
@@ -78,7 +89,7 @@ export class TowerPlot {
     const { progress, result } = pour(this.progress);
     if (result === 'notDug' || result === 'alreadyPoured') {
       if (piece) this.bounce(piece);
-      this.events.onWrong(piece, this.needed, result === 'notDug' ? 'groundworkFirst' : 'wrongPiece');
+      this.events.onWrong(piece, this.neededAll, result === 'notDug' ? 'groundworkFirst' : 'wrongPiece', 'concrete');
       return false;
     }
     this.progress = progress;
@@ -105,14 +116,17 @@ export class TowerPlot {
     if (type === 'concrete' && groundworkPart(this.progress) !== null) {
       return this.pourConcrete(piece) ? 'snapped' : 'groundworkFirst';
     }
-    const slotIndex = this.progress.filledSlots - this.progress.highFilled;
+    const slotIndex = this.handSlotIndex(type);
+    // the shared rule (data-model §5 step 5): a crane piece takes a high slot when aimed at one or when no ordinary slot of its material is left
+    const open = openSlotsOf(this.progress, type);
+    const wentHigh = via === 'crane' && open.high > 0 && (!!slot?.high || open.ordinary <= 0);
     const { progress, result } = deliver(this.progress, type, via, slot);
-    if (result === 'wrongPiece' || result === 'alreadyComplete' || result === 'groundworkFirst' || result === 'tooHigh') {
+    if (result === 'wrongPiece' || result === 'alreadyComplete' || result === 'groundworkFirst' || result === 'tooHigh' || result === 'surplus') {
       if (piece) this.bounce(piece);
-      this.events.onWrong(piece, this.needed, result === 'alreadyComplete' ? 'wrongPiece' : result);
+      this.events.onWrong(piece, this.neededAll, result === 'alreadyComplete' ? 'wrongPiece' : result, type);
       return result;
     }
-    const highSlot = progress.highFilled > this.progress.highFilled || (progress.filledSlots === 0 && !!slot?.high);
+    const highSlot = wentHigh;
     this.progress = progress;
     if (piece && !highSlot) {
       this.pieces.detach(piece);
@@ -129,6 +143,23 @@ export class TowerPlot {
       if (!piece) this.finishPending();
     }
     return result;
+  }
+
+  /**
+   * feature 004: the arc index of the next free ordinary slot of `type` in the current stage (the
+   * shared `stageHandSlots` order: each material's ordinary slots in a block, recipe order).
+   */
+  handSlotIndex(type: PieceTypeId): number {
+    const st = this.stage;
+    if (!st) return 0;
+    let offset = 0;
+    const h = highItem(st);
+    for (let i = 0; i < st.recipe.length; i++) {
+      const r = st.recipe[i]!;
+      if (r.type === type) return offset + (this.progress.filled[i] ?? 0) - (i === h ? this.progress.highFilled : 0);
+      offset += r.count - r.high;
+    }
+    return offset;
   }
 
   private finishPending(): void {
@@ -188,17 +219,16 @@ export class TowerPlot {
     this.events.onGround?.(this.progress, true);
   }
 
-  /** debug: fill the remaining slots of the current stage (Groundwork first; high slots through the crane rule) */
+  /** debug: fill the remaining slots of the current stage, every recipe material (Groundwork first; high slots through the crane rule) */
   completeStage(): DeliverResult | null {
     this.completeGroundwork();
-    const need = this.needed;
-    const st = this.stage;
-    if (!need || !st) return null;
+    if (!this.stage) return null;
     let r: DeliverResult = 'snapped';
     const start = this.progress.completedStages;
     for (let i = 0; i < 40 && this.progress.completedStages === start && !this.masterpiece; i++) {
-      const high = this.progress.filledSlots - this.progress.highFilled >= st.slotCount - st.highSlots;
-      r = this.deliverPiece(need, null, high ? 'crane' : 'hand', { high });
+      const n = needsOf(this.progress).find((x) => !x.done);
+      if (!n) break;
+      r = this.deliverPiece(n.type, null, n.craneOnly ? 'crane' : 'hand', { high: n.craneOnly });
     }
     return r;
   }

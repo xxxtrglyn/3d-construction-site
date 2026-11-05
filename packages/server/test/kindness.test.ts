@@ -1,11 +1,11 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { SITE } from '@hht/shared';
+import { SITE, neededSupplies } from '@hht/shared';
 import type { RunningServer } from '../src/server.ts';
-import { boot, joinPlayer, sleep, until } from './helpers.ts';
+import { boot, joinPlayer, sleep, until, worldOf } from './helpers.ts';
 import { helpersFor } from './world-helpers.ts';
 
 let server: RunningServer;
-const { S, put, host, dropAt, plotState } = helpersFor(() => server);
+const { S, put, host, dropAt, plotState, filledOf, progressOf } = helpersFor(() => server);
 afterEach(async () => {
   await server?.close();
 });
@@ -20,7 +20,7 @@ describe('supply bins, emotes and anti-griefing', () => {
     await dropAt(outsider, d.x, d.z, 'brick');
     await outsider.waitFor('binned');
     expect(Array.from(plotState(plot).bin)).toEqual(['brick']);
-    expect(plotState(plot).filledSlots).toBe(0);
+    expect(filledOf(plot)).toBe(0);
     put(a, d.bin.x, d.bin.z);
     a.send('grab', { target: { kind: 'bin', plot } });
     await until(() => S(a).worker.carrying === 'brick');
@@ -51,6 +51,61 @@ describe('supply bins, emotes and anti-griefing', () => {
     await dropAt(o, d.x, d.z, 'cone');
     expect((await o.waitFor('hint', (h) => h.kind === 'notCrew')).kind).toBe('notCrew');
     expect(plotState(plot).bin.length).toBe(1);
+    await a.leave();
+    await o.leave();
+  });
+
+  it('a bin takes only what the stage still needs: a 3rd brick for the Frame (2 bricks binned) is binNotNeeded and set down', async () => {
+    server = await boot();
+    const a = await joinPlayer(server);
+    const o = await joinPlayer(server);
+    const plot = await host(a);
+    const d = SITE.plots[plot]!;
+    // Frame (feature 004): beam×4 + brick×2
+    for (let i = 1; i <= 2; i++) {
+      await dropAt(o, d.bin.x, d.bin.z, 'brick');
+      await until(() => plotState(plot).bin.length === i);
+    }
+    await dropAt(o, d.bin.x, d.bin.z, 'brick');
+    expect(await o.waitFor('hint', (h) => h.kind === 'binNotNeeded')).toEqual({ kind: 'binNotNeeded', type: 'brick', needed: ['beam', 'brick'] });
+    expect(Array.from(plotState(plot).bin)).toEqual(['brick', 'brick']);
+    // the refused brick is not consumed: it lies loose on the ground outside the build zone
+    const pcs = [...worldOf(server).systems.pieces.values()];
+    expect(pcs).toHaveLength(1);
+    expect(pcs[0]).toMatchObject({ type: 'brick', state: 'loose' });
+    expect(Math.hypot(pcs[0]!.x - d.x, pcs[0]!.z - d.z)).toBeGreaterThan(d.buildZoneRadius);
+    // a beam is still welcome
+    await dropAt(o, d.bin.x, d.bin.z, 'beam');
+    await until(() => plotState(plot).bin.length === 3);
+    expect(o.events.filter((e) => e.type === 'hint')).toHaveLength(1);
+    expect(filledOf(plot)).toBe(0);
+    await a.leave();
+    await o.leave();
+  });
+
+  it('bin pieces survive stage changes, and a crew pickup prefers a material the stage still needs', async () => {
+    server = await boot();
+    const a = await joinPlayer(server);
+    const o = await joinPlayer(server);
+    const plot = await host(a);
+    const d = SITE.plots[plot]!;
+    // donated during the Frame: a beam, then a brick (the most recent)
+    await dropAt(o, d.bin.x, d.bin.z, 'beam');
+    await dropAt(o, d.bin.x, d.bin.z, 'brick');
+    await until(() => plotState(plot).bin.length === 2);
+    // Frame → Walls & Floors → Roof & Windows (panel + beam): the brick is no longer needed
+    for (let st = 1; st <= 2; st++) {
+      await sleep(550);
+      a.send('dev', { op: 'fillStage', plot });
+      await until(() => plotState(plot).completedStages === st);
+    }
+    expect(Array.from(plotState(plot).bin)).toEqual(['beam', 'brick']);
+    expect(neededSupplies(progressOf(plot))).toEqual(['panel', 'beam']);
+    put(a, d.bin.x, d.bin.z);
+    a.send('grab', { target: { kind: 'bin', plot } });
+    await until(() => S(a).worker.carrying !== null);
+    expect(S(a).worker.carrying).toBe('beam');
+    expect(Array.from(plotState(plot).bin)).toEqual(['brick']);
     await a.leave();
     await o.leave();
   });

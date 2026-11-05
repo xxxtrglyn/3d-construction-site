@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { FORK_REACH, MOVE, SITE, inNoDrive, MACHINE_RADIUS } from '@hht/shared';
+import { CLOCK_TOWER, FORK_REACH, MOVE, SITE, inNoDrive, MACHINE_RADIUS, neededSupplies, openSlotsOf, palletSize } from '@hht/shared';
 import type { RunningServer } from '../src/server.ts';
 import { boot, joinPlayer, sleep, until, type Player } from './helpers.ts';
 import { machineHelpersFor } from './machine-helpers.ts';
 
 let server: RunningServer;
 const M = machineHelpersFor(() => server);
-const { S, host, enter, steps, press, hold, rec, sys, plotState, dropAt } = M;
+const { S, host, enter, steps, press, hold, rec, sys, plotState, dropAt, progressOf } = M;
 afterEach(async () => {
   await server?.close();
 });
@@ -26,37 +26,84 @@ const toStage = async (p: Player, plot: number, stage: number) => {
   }
 };
 
+/** Forks at the rack of `type`, press: the pallet then holds `n` pieces of it (0 = nothing loads). */
+const loadAt = async (p: Player, plot: number, type: string, n: number) => {
+  const r = rackOf(type);
+  forksAt(plot, r.x, r.z, { x: 0, z: 0 });
+  await steps(p, press(16));
+  if (n === 0) expect(Array.from(plotState(plot).palletTypes)).toEqual([]);
+  else {
+    await until(() => plotState(plot).palletTypes.length === n);
+    expect(Array.from(plotState(plot).palletTypes)).toEqual(Array.from({ length: n }, () => type));
+  }
+};
+/** Forks over the plot's build zone, press: the pallet is unloaded. */
+const unloadAtPlot = async (p: Player, plot: number) => {
+  const def = SITE.plots[plot]!;
+  forksAt(plot, def.x, def.z, { x: def.x + def.s * 4, z: def.z + def.c * 4 });
+  await steps(p, press(16));
+  await until(() => plotState(plot).palletTypes.length === 0);
+};
+
 describe('forklift (US4)', () => {
-  it('loads min(4, needed) of the needed type at a rack, never other types; 2 trips fill the 8 brick slots', async () => {
+  it('loads min(4, needed) of each needed material at its rack, never other types; Walls fills with 4 + 2 bricks and a 2-beam pallet', async () => {
     server = await boot();
     const a = await joinPlayer(server);
     const plot = await host(a);
     await toStage(a, plot, 2);
-    const def = SITE.plots[plot]!;
+    // Walls & Floors (feature 004): brick×6 + beam×2
+    expect(CLOCK_TOWER.stages[1]!.recipe.map((r) => [r.type, r.count])).toEqual([['brick', 6], ['beam', 2]]);
     expect(await enter(a, plot, 'forklift')).toBe('entered');
-    // a beam rack is not needed: nothing loads
-    const beam = rackOf('beam');
-    forksAt(plot, beam.x, beam.z, { x: 0, z: 0 });
-    await steps(a, press(16));
-    expect(Array.from(plotState(plot).palletTypes)).toEqual([]);
-    for (let trip = 1; trip <= 2; trip++) {
-      const brick = rackOf('brick');
-      forksAt(plot, brick.x, brick.z, { x: 0, z: 0 });
-      await steps(a, press(16));
-      await until(() => plotState(plot).palletTypes.length === 4);
-      expect(Array.from(plotState(plot).palletTypes)).toEqual(['brick', 'brick', 'brick', 'brick']);
+    // a paint rack is not needed: nothing loads
+    await loadAt(a, plot, 'paint', 0);
+    // each trip loads min(4, that material's open slots) and unloads into the tower
+    let snaps = 0;
+    for (const [type, n] of [['brick', 4], ['brick', 2], ['beam', 2]] as const) {
+      expect(palletSize(progressOf(plot), type)).toBe(n);
+      await loadAt(a, plot, type, n);
       expect(a.room.state.pieces.size).toBe(0); // pallet pieces are not in the schema
-      forksAt(plot, def.x, def.z, { x: def.x + def.s * 4, z: def.z + def.c * 4 });
-      await steps(a, press(16));
-      await until(() => plotState(plot).palletTypes.length === 0);
-      if (trip === 1) {
-        await until(() => plotState(plot).filledSlots === 4);
+      await unloadAtPlot(a, plot);
+      snaps += n;
+      await until(() => sys().machines.usage.forkliftSnaps === snaps);
+      if (snaps === 4) {
+        expect(plotState(plot)).toMatchObject({ filledA: 4, filledB: 0 });
         expect((await a.waitFor('snap', (e) => e.via === 'forklift')).pieceType).toBe('brick');
       }
     }
     await until(() => plotState(plot).completedStages === 2);
     expect(sys().pieces.size).toBe(0);
     expect(sys().machines.usage.forkliftSnaps).toBe(8);
+    await a.leave();
+  }, 30_000);
+
+  it('unloading 4 bricks into 3 open brick slots snaps 3 and sets 1 down beside the plot; a complete material\'s rack then loads nothing', async () => {
+    server = await boot();
+    const a = await joinPlayer(server);
+    const plot = await host(a);
+    await toStage(a, plot, 2);
+    const def = SITE.plots[plot]!;
+    expect(await enter(a, plot, 'forklift')).toBe('entered');
+    await loadAt(a, plot, 'brick', 4);
+    // meanwhile the crew lays 3 bricks by hand: only 3 brick slots stay open
+    const b = sys().plots[plot]!;
+    b.progress = { ...b.progress, filled: [3, 0] };
+    sys().syncPlot(plot);
+    expect(openSlotsOf(progressOf(plot), 'brick')).toEqual({ ordinary: 3, high: 0 });
+    await unloadAtPlot(a, plot);
+    await until(() => plotState(plot).filledA === 6 && sys().pieces.size === 1);
+    expect(sys().machines.usage.forkliftSnaps).toBe(3);
+    expect(plotState(plot)).toMatchObject({ completedStages: 1, filledA: 6, filledB: 0 });
+    const left = [...sys().pieces.values()][0]!;
+    expect(left).toMatchObject({ type: 'brick', state: 'loose' });
+    const dist = Math.hypot(left.x - def.x, left.z - def.z);
+    expect(dist).toBeGreaterThan(def.buildZoneRadius);
+    expect(dist).toBeLessThan(def.buildZoneRadius + 2);
+    expect(sys().audit.overfilledSlots).toBe(0);
+    // bricks are complete: the brick rack is "not needed" now; the beam rack loads the 2 beams still needed
+    expect(neededSupplies(progressOf(plot))).toEqual(['beam']);
+    await loadAt(a, plot, 'brick', 0);
+    await loadAt(a, plot, 'beam', 2);
+    expect(sys().machines.audit.heldPiecesLost).toBe(0);
     await a.leave();
   }, 30_000);
 

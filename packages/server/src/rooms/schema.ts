@@ -25,7 +25,9 @@ export const PlotState = schema(
     state: t.string().default('free'),
     blueprintId: t.string(),
     completedStages: t.uint8(),
-    filledSlots: t.uint8(),
+    // feature 004 (contracts/network-protocol-v3.md): filled slots per recipe item of the current stage
+    filledA: t.uint8(),
+    filledB: t.uint8(),
     hostName: t.string(),
     hostSession: t.string(),
     joinMode: t.string().default('ask'),
