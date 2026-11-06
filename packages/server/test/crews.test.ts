@@ -5,7 +5,7 @@ import { helpersFor } from './world-helpers.ts';
 import { SITE } from '@hht/shared';
 
 let server: RunningServer;
-const { S, host, dropAt, plotState } = helpersFor(() => server);
+const { S, host, dropAt, plotState, filledOf, handNeed } = helpersFor(() => server);
 afterEach(async () => {
   await server?.close();
 });
@@ -26,8 +26,8 @@ describe('crews and join modes', () => {
     expect(S(b).crewPlot).toBe(plot);
     expect(S(b).crewRole).toBe('member');
     const d = SITE.plots[plot]!;
-    await dropAt(b, d.x, d.z, 'beam');
-    await until(() => plotState(plot).filledSlots === 1);
+    await dropAt(b, d.x, d.z, handNeed(plot)!);
+    await until(() => filledOf(plot) === 1);
     await a.leave();
     await b.leave();
   });

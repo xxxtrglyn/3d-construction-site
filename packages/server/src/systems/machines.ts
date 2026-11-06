@@ -1,6 +1,6 @@
 import {
   forkliftLoadCount,
-  CLOCK_TOWER, MACHINE, MACHINES_PER_PLOT, MACHINE_KINDS, NET, SIM_DT, SITE,
+  MACHINE, MACHINES_PER_PLOT, MACHINE_KINDS, NET, SIM_DT, SITE,
   atSpoil, canEnter, dig, distToSquare, exitSpot, groundworkPart, hookPos, initialWorker, kindIndex, kindOfMachine, machineBusy,
   machineCtx, openSlotRefs, parkedState, plotOfMachine, pour, rackAtForks, seatPose, setDownSpot, snapTarget,
   stepMachine, toolTip,
@@ -363,7 +363,7 @@ export class MachineSystem {
     this.w.releasePiece(piece.id, at.x, at.z, now, s.pid);
   }
 
-  /** How many pieces of `type` a pallet should take for the plot right now (FR-029). */
+  /** How many pieces of `type` a pallet should take for the plot right now (003 FR-029, 004 FR-016). */
   private palletCount(plot: number, type: PieceTypeId): number {
     const b = this.w.plots[plot];
     if (!b || b.state !== 'building' || type === 'concrete' || type === 'cone') return 0;

@@ -6,7 +6,7 @@ import { closePlayers, dev as devRaw, me, mpEvents, openPlayer, plots, send, typ
 test.describe.configure({ timeout: 180_000 });
 test.afterEach(closePlayers);
 
-type Plot = { groundDug: number; groundPoured: number; highFilled: number; mixerBags: number; hookType: string; palletTypes: string[]; filledSlots: number; completedStages: number; state: string };
+type Plot = { groundDug: number; groundPoured: number; highFilled: number; mixerBags: number; hookType: string; palletTypes: string[]; filledSlots: number; filledA: number; filledB: number; completedStages: number; state: string };
 type MachineInfo = { id: number; kind: MachineKind; x: number; z: number; yaw: number; p1: number; p2: number; p3: number; phase: string; operator: string };
 const net = <T>(p: Page, fn: string, ...args: unknown[]): Promise<T> =>
   p.evaluate(([f, a]) => ((window as NetWin).__hht!.net as unknown as Record<string, (...x: unknown[]) => unknown>)[f as string]!(...(a as unknown[])) as T, [fn, args] as const);
@@ -132,6 +132,12 @@ test('get in, drive, get out; the other player sees it move; outsiders: Crew onl
   await getIn(a.page, plot, 'forklift');
   expect(await net<string>(a.page, 'camera')).toBe('follow');
   await expect(a.page.getByTestId('machine-hint')).toBeVisible();
+  // the control bar stays the whole time; Q switches follow ↔ driver camera
+  await expect(a.page.getByTestId('machine-bar')).toContainText('Q camera');
+  await key(a.page, 'KeyQ');
+  await expect.poll(() => net<string>(a.page, 'camera'), { timeout: 3000 }).toBe('cab');
+  await key(a.page, 'KeyQ');
+  await expect.poll(() => net<string>(a.page, 'camera'), { timeout: 3000 }).toBe('follow');
   const start = await machine(a.page, id);
   await a.page.locator('#game').focus();
   await a.page.keyboard.down('KeyW');
@@ -154,6 +160,7 @@ test('get in, drive, get out; the other player sees it move; outsiders: Crew onl
   // Space gets out
   await getOut(a.page);
   await expect.poll(() => net<string>(a.page, 'camera'), { timeout: 3000 }).toBe('follow');
+  await expect(a.page.getByTestId('machine-bar')).toBeHidden();
   expect(a.errors).toEqual([]);
   expect(b.errors).toEqual([]);
 });
@@ -246,16 +253,17 @@ test('crane: a hand panel at a high slot is refused; pad → grab → lit ring �
     await expect.poll(async () => (await plot$(a.page, plot)).completedStages, { timeout: 5000 }).toBe(st + 1);
   }
   const d = SITE.plots[plot]!;
-  for (let i = 1; i <= 4; i++) {
+  // Roof & Windows (004): panel×4 (3 high) + beam×2 — the one ordinary panel slot by hand, then tooHigh
+  for (let i = 1; i <= 2; i++) {
     await dev(a.page, 'teleport', d.x, 0, d.z + 0.4);
     await a.page.waitForTimeout(250);
     await dev(a.page, 'give', 'panel');
     await expect.poll(async () => (await me(a.page)).holding, { timeout: 4000 }).toBe('panel');
     await key(a.page, 'KeyE');
-    if (i <= 3) await expect.poll(async () => (await plot$(a.page, plot)).filledSlots, { timeout: 4000 }).toBe(i);
+    if (i === 1) await expect.poll(async () => (await plot$(a.page, plot)).filledA, { timeout: 4000 }).toBe(1);
   }
   await expect.poll(async () => (await mpEvents(a.page, 'hint')).map((e) => (e.detail as { kind: string }).kind), { timeout: 4000 }).toContain('tooHigh');
-  expect((await plot$(a.page, plot)).filledSlots).toBe(3);
+  expect((await plot$(a.page, plot)).filledA).toBe(1);
   // the crane lifts a panel from the pad into a high slot
   await pieceOnPad(a.page, plot, 'panel');
   await getIn(a.page, plot, 'crane');
@@ -264,7 +272,7 @@ test('crane: a hand panel at a high slot is refused; pad → grab → lit ring �
   await expect.poll(() => net<string>(a.page, 'camera'), { timeout: 3000 }).toBe('cab');
   await hookPiece(a.page, plot);
   await expect.poll(async () => (await plot$(a.page, plot)).hookType, { timeout: 5000 }).toBe('panel');
-  const high = openSlotRefs(d, SITE.machines[plot]!, { blueprintId: 'clock-tower', groundDug: 6, groundPoured: 4, completedStages: 2, filledSlots: 3, highFilled: 0 }).find((s) => s.high)!;
+  const high = openSlotRefs(d, SITE.machines[plot]!, { blueprintId: 'clock-tower', groundDug: 6, groundPoured: 4, completedStages: 2, filled: [1, 0], highFilled: 0 }).find((s) => s.high)!;
   await aimHook(a.page, plot, high.x + 1.0, high.z);
   await expect.poll(() => net<{ high: boolean } | null>(a.page, 'snapRing'), { timeout: 3000 }).toMatchObject({ high: true });
   await key(a.page, 'KeyE');
@@ -282,6 +290,13 @@ test('crane: a hand panel at a high slot is refused; pad → grab → lit ring �
     await dev(a.page, 'fillStage', plot);
     await expect.poll(async () => (await plot$(a.page, plot)).completedStages, { timeout: 5000 }).toBe(st + 1);
   }
+  // the Masterpiece (004): the decor crate by hand, then the bell by crane
+  await dev(a.page, 'teleport', d.x, 0, d.z + 0.4);
+  await a.page.waitForTimeout(250);
+  await dev(a.page, 'give', 'decor');
+  await expect.poll(async () => (await me(a.page)).holding, { timeout: 4000 }).toBe('decor');
+  await key(a.page, 'KeyE');
+  await expect.poll(async () => (await plot$(a.page, plot)).filledB, { timeout: 4000 }).toBe(1);
   await pieceOnPad(a.page, plot, 'bell');
   await getIn(a.page, plot, 'crane');
   await hookPiece(a.page, plot);
@@ -293,7 +308,7 @@ test('crane: a hand panel at a high slot is refused; pad → grab → lit ring �
   expect(a.errors).toEqual([]);
 });
 
-test('forklift: 2 trips fill the 8 brick slots; it stops at the plaza edge; a worker in the path is not pushed (US4)', async ({ browser }) => {
+test('forklift: pallets sized to each material fill Walls & Floors (4 + 2 bricks, 2 beams); it stops at the plaza edge; a worker in the path is not pushed (US4)', async ({ browser }) => {
   const a = await openPlayer(browser);
   await freshWorld(a.page);
   const b = await openPlayer(browser);
@@ -308,14 +323,19 @@ test('forklift: 2 trips fill the 8 brick slots; it stops at the plaza edge; a wo
     await dev(a.page, 'machinePose', id, { x: x - Math.sin(yaw) * FORK_REACH, z: z - Math.cos(yaw) * FORK_REACH, yaw, p3: 0 });
     await a.page.waitForTimeout(500);
   };
-  const rack = SITE.racks.find((r) => r.type === 'brick')!;
   const d = SITE.plots[plot]!;
-  for (let trip = 1; trip <= 2; trip++) {
+  // Walls & Floors (004): brick×6 + beam×2 → pallets of 4 bricks, 2 bricks, 2 beams (FR-016)
+  for (const [type, n, label] of [['brick', 4, 'Load 4 bricks'], ['brick', 2, 'Load 2 bricks'], ['beam', 2, 'Load 2 beams']] as const) {
+    const rack = SITE.racks.find((r) => r.type === type)!;
     await forksAt(rack.x, rack.z, 0, 0);
-    await expect.poll(async () => (await net<{ text: string }>(a.page, 'machineLabel')).text, { timeout: 3000 }).toBe('Load 4 bricks');
+    await expect.poll(async () => (await net<{ text: string }>(a.page, 'machineLabel')).text, { timeout: 3000 }).toBe(label);
+    // the server ignores more than 4 action presses per 60 sim steps (003 anti-mashing); software rendering
+    // runs the sim several times slower than real time, so give each trip's presses room
+    await a.page.waitForTimeout(3000);
     await key(a.page, 'KeyE');
-    await expect.poll(async () => (await plot$(a.page, plot)).palletTypes.length, { timeout: 4000 }).toBe(4);
+    await expect.poll(async () => (await plot$(a.page, plot)).palletTypes.length, { timeout: 4000 }).toBe(n);
     await forksAt(d.x, d.z, d.x + d.s * 4, d.z + d.c * 4);
+    await a.page.waitForTimeout(3000);
     await key(a.page, 'KeyE');
     await expect.poll(async () => (await plot$(a.page, plot)).palletTypes.length, { timeout: 4000 }).toBe(0);
   }
@@ -414,7 +434,7 @@ test('crane preview clears when another client advances the stage before release
   await pieceOnPad(a.page, plot, 'beam');
   await getIn(a.page, plot, 'crane');
   await hookPiece(a.page, plot);
-  const target = openSlotRefs(SITE.plots[plot]!, SITE.machines[plot]!, { blueprintId: 'clock-tower', groundDug: 6, groundPoured: 4, completedStages: 0, filledSlots: 0, highFilled: 0 })[0]!;
+  const target = openSlotRefs(SITE.plots[plot]!, SITE.machines[plot]!, { blueprintId: 'clock-tower', groundDug: 6, groundPoured: 4, completedStages: 0, filled: [0, 0], highFilled: 0 })[0]!;
   await aimHook(a.page, plot, target.x, target.z);
   await expect.poll(() => net<unknown>(a.page, 'snapRing')).not.toBeNull();
   await dev(b.page, 'fillStage', plot);

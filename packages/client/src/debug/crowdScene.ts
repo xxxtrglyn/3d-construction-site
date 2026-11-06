@@ -47,7 +47,7 @@ export class CrowdPerfScene extends GameShell {
     this.hudRoot = hudRoot;
     const stages = [6, 6, 6, 6, 5, 4, 3, 2, 1, 0, 3, 5];
     const plots: PlotView[] = stages.map((s, i) => ({
-      state: s === 6 ? 'finished' : 'building', blueprintId: CLOCK_TOWER.id, completedStages: s, filledSlots: s === 6 ? 0 : 1,
+      state: s === 6 ? 'finished' : 'building', blueprintId: CLOCK_TOWER.id, completedStages: s, filledA: s === 6 ? 0 : 1, filledB: 0,
       hostName: `Host ${i + 1}`, hostSession: `h${i}`, joinMode: 'ask', crewSize: 1 + (i % 8), bin: Array.from({ length: i % 4 }, () => 'brick'), finishedAt: 0,
       groundDug: s === 0 ? 3 : 6, groundPoured: s === 0 ? 0 : 4, highFilled: 0, mixerBags: s === 0 ? 2 : 0, mixerMixUntil: 0,
       machineOps: ['', '', '', ''], hookType: '', palletTypes: [],

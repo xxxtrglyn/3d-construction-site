@@ -1,13 +1,14 @@
 import * as THREE from 'three';
 import {
   forkliftLoadCount, forkliftUnloadLabel,
-  CLOCK_TOWER, MACHINE, MACHINE_KINDS, SIM_DT, atPit, atSpoil, exitSpot, groundworkPart, hookPos, machineBusy, machineCtx, machineId,
-  openSlotRefs, parkedState, rackAtForks, seatPose, setDownSpot, snapTarget, stepMachine, toolTip,
+  CLOCK_TOWER, MACHINE, MACHINE_KINDS, PIECE_TYPES, SIM_DT, atPit, atSpoil, exitSpot, groundworkPart, hookPos, machineBusy, machineCtx, machineId,
+  neededSupplies, openSlotRefs, parkedState, rackAtForks, seatPose, setDownSpot, snapTarget, stepMachine, toolTip,
   type MachineAction, type MachineCtx, type MachineKind, type MachineState, type MoveInput, type ObstacleBox, type PieceTypeId,
   type SiteLayout, type SlotRef,
 } from '@hht/shared';
 import type { Piece, PieceManager } from '../game/pieceManager.ts';
 import type { TowerPlot } from '../game/towerPlot.ts';
+import { countNoun } from '../ui/needsText.ts';
 
 export interface SoloMachineEvents {
   snap?(): void;
@@ -196,7 +197,7 @@ export class SoloMachines {
     const s = this.states[0]!;
     if (s.load.kind !== 'hook') return null;
     const def = this.site.plots[0]!;
-    return snapTarget(hookPos(s, this.spots), s.load.piece, openSlotRefs(def, this.spots, this.plot.progress, CLOCK_TOWER));
+    return snapTarget(hookPos(s, this.spots), s.load.piece, openSlotRefs(def, this.spots, this.plot.progress));
   }
 
   private release(i: number): void {
@@ -229,6 +230,7 @@ export class SoloMachines {
     const rack = this.site.racks[rackAtForks(s, this.site)];
     if (!rack) return;
     const pr = this.plot.progress;
+    if (rack.type === 'concrete' || rack.type === 'cone') return;
     const n = forkliftLoadCount(pr, rack.type, this.mixerBags);
     if (n <= 0) return;
     this.setLoad(i, { kind: 'pallet', pieces: Array.from({ length: n }, () => rack.type) });
@@ -333,7 +335,9 @@ export class SoloMachines {
         const rack = this.site.racks[rackAtForks(s, this.site)];
         if (!rack) return { text: 'Drive to a rack', disabled: true };
         const n = forkliftLoadCount(pr, rack.type, this.mixerBags);
-        return n > 0 ? { text: `Load ${n} ${rack.type}`, disabled: false } : { text: 'Nothing needed here', disabled: true };
+        if (n > 0) return { text: `Load ${countNoun(rack.type, n)}`, disabled: false };
+        if (!neededSupplies(pr).includes(rack.type) && !(rack.type === 'cement' && groundworkPart(pr))) return { text: `${PIECE_TYPES[rack.type].label}: not needed`, disabled: true };
+        return { text: 'Nothing needed', disabled: true };
       }
       case 'crane':
         if (s.phase !== 'idle') return { text: s.phase === 'lowering' ? 'Lowering…' : 'Raising…', disabled: true };

@@ -1,22 +1,55 @@
 import { describe, expect, it } from 'vitest';
 import {
-  CLOCK_TOWER, deliver, dig, groundworkDone, initialProgress, isMasterpiece, neededPiece, neededSupply, pour, reset, starsOf,
-  type TowerProgress, type Via,
+  CLOCK_TOWER, CLOCK_TOWER_V1, deliver, dig, filledTotal, groundworkDone, initialProgress, isMasterpiece, needsOf, neededPiece,
+  neededSupplies, neededSupply, openSlots, openSlotsOf, pour, reset, starsOf,
+  type Blueprint, type PieceTypeId, type TowerProgress, type Via,
 } from '../src/index.ts';
 
-/** 001 rules: every slot by hand (high slots via the crane), after Groundwork. */
-const ready = (): TowerProgress => ({ ...initialProgress(), groundDug: 6, groundPoured: 4 });
-const fill = (p: TowerProgress, type: Parameters<typeof deliver>[1], i: number, stageIdx: number) => {
-  const st = CLOCK_TOWER.stages[stageIdx]!;
-  return i < st.slotCount - st.highSlots ? deliver(p, type, 'hand') : deliver(p, type, 'crane', { high: true });
+const grounded = (bp: Blueprint = CLOCK_TOWER): TowerProgress => ({ ...initialProgress(bp), groundDug: 6, groundPoured: 4 });
+
+/** Every slot of the current stage: ordinary slots by hand, high slots by the crane (recipe order). */
+const stageDeliveries = (bp: Blueprint, stageIdx: number): Array<[PieceTypeId, Via, boolean]> => {
+  const st = bp.stages[stageIdx]!;
+  const out: Array<[PieceTypeId, Via, boolean]> = [];
+  for (const r of st.recipe) {
+    for (let i = 0; i < r.count - r.high; i++) out.push([r.type, 'hand', false]);
+    for (let i = 0; i < r.high; i++) out.push([r.type, 'crane', true]);
+  }
+  return out;
 };
 
-const fullRun = () => {
-  let p: TowerProgress = ready();
+/** Seeded shuffle (mulberry32) so mixed orders are reproducible. */
+const shuffle = <T>(xs: T[], seed: number): T[] => {
+  let a = seed >>> 0;
+  const rnd = () => {
+    a = (a + 0x6d2b79f5) >>> 0;
+    let t = a;
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+  const out = xs.slice();
+  for (let i = out.length - 1; i > 0; i--) {
+    const j = Math.floor(rnd() * (i + 1));
+    [out[i], out[j]] = [out[j] as T, out[i] as T];
+  }
+  return out;
+};
+
+const toStage = (stage: number, bp: Blueprint = CLOCK_TOWER): TowerProgress => {
+  let p = grounded(bp);
+  while (p.completedStages < stage - 1) {
+    for (const [t, via, high] of stageDeliveries(bp, p.completedStages)) p = deliver(p, t, via, { high }).progress;
+  }
+  return p;
+};
+
+const fullRun = (bp: Blueprint) => {
+  let p = grounded(bp);
   const results: string[] = [];
-  CLOCK_TOWER.stages.forEach((stage, si) => {
-    for (let i = 0; i < stage.slotCount; i++) {
-      const r = fill(p, stage.pieceType, i, si);
+  bp.stages.forEach((_, si) => {
+    for (const [t, via, high] of stageDeliveries(bp, si)) {
+      const r = deliver(p, t, via, { high });
       p = r.progress;
       results.push(r.result);
     }
@@ -24,104 +57,205 @@ const fullRun = () => {
   return { p, results };
 };
 
-describe('progression', () => {
-  it('starts empty with 0 stars needing beams', () => {
-    const p = initialProgress();
-    expect(p.completedStages).toBe(0);
-    expect(starsOf(p)).toBe(0);
-    expect(neededPiece(p)).toBe('beam');
-  });
+// ---------------------------------------------------------------- both recipe versions
 
-  it('30 correct deliveries reach the masterpiece', () => {
-    const { p, results } = fullRun();
-    expect(results).toHaveLength(30);
-    expect(results.filter((r) => r === 'stageComplete')).toHaveLength(5);
-    expect(results.at(-1)).toBe('masterpiece');
-    expect(isMasterpiece(p)).toBe(true);
-    expect(starsOf(p)).toBe(5);
-    expect(neededPiece(p)).toBeNull();
-  });
-
-  it('wrong piece leaves progress unchanged', () => {
-    const p = ready();
-    const r = deliver(p, 'brick');
-    expect(r.result).toBe('wrongPiece');
-    expect(r.progress).toBe(p);
-    expect(deliver(p, 'cone').result).toBe('wrongPiece');
-  });
-
-  it('after masterpiece deliveries are alreadyComplete', () => {
-    const { p } = fullRun();
-    const r = deliver(p, 'bell');
-    expect(r.result).toBe('alreadyComplete');
-    expect(r.progress).toBe(p);
-  });
-
-  it('stars grow one per stage', () => {
-    let p = ready();
-    const stars: number[] = [];
-    CLOCK_TOWER.stages.forEach((stage, si) => {
-      for (let i = 0; i < stage.slotCount; i++) p = fill(p, stage.pieceType, i, si).progress;
-      stars.push(starsOf(p));
+for (const [bp, total] of [[CLOCK_TOWER, 31], [CLOCK_TOWER_V1, 30]] as const) {
+  describe(`progression (${bp.id})`, () => {
+    it('starts empty with 0 stars needing beams; filled matches the first stage', () => {
+      const p = initialProgress(bp);
+      expect(p).toMatchObject({ blueprintId: bp.id, completedStages: 0, highFilled: 0, groundDug: 0, groundPoured: 0 });
+      expect(p.filled).toEqual(bp.stages[0]!.recipe.map(() => 0));
+      expect(starsOf(p)).toBe(0);
+      expect(neededPiece(p)).toBe('beam');
     });
-    expect(stars).toEqual([1, 2, 3, 4, 5, 5]);
-  });
-
-  it('one delivery never advances more than one slot', () => {
-    let p = ready();
-    for (const [si, stage] of CLOCK_TOWER.stages.entries()) {
-      for (let i = 0; i < stage.slotCount; i++) {
-        const before = p.completedStages * 100 + p.filledSlots;
-        p = fill(p, stage.pieceType, i, si).progress;
-        const after = p.completedStages * 100 + p.filledSlots;
-        const advanced = p.filledSlots === 0 ? p.completedStages - Math.floor(before / 100) : after - before;
-        expect(advanced).toBe(1);
+    it(`${total} correct deliveries reach the masterpiece`, () => {
+      const { p, results } = fullRun(bp);
+      expect(results).toHaveLength(total);
+      expect(results.filter((r) => r === 'stageComplete')).toHaveLength(5);
+      expect(results.at(-1)).toBe('masterpiece');
+      expect(isMasterpiece(p)).toBe(true);
+      expect(starsOf(p)).toBe(5);
+      expect(neededPiece(p)).toBeNull();
+      expect(p.filled).toEqual([]);
+      expect(deliver(p, 'bell').result).toBe('alreadyComplete');
+    });
+    it('stars grow one per stage (5 at the Masterpiece)', () => {
+      let p = grounded(bp);
+      const stars: number[] = [];
+      bp.stages.forEach((_, si) => {
+        for (const [t, via, high] of stageDeliveries(bp, si)) p = deliver(p, t, via, { high }).progress;
+        stars.push(starsOf(p));
+      });
+      expect(stars).toEqual([1, 2, 3, 4, 5, 5]);
+    });
+    it('one delivery never advances more than one slot', () => {
+      let p = grounded(bp);
+      bp.stages.forEach((_, si) => {
+        for (const [t, via, high] of stageDeliveries(bp, si)) {
+          const before = p;
+          p = deliver(p, t, via, { high }).progress;
+          if (p.completedStages === before.completedStages) expect(filledTotal(p) - filledTotal(before)).toBe(1);
+          else expect(p.completedStages - before.completedStages).toBe(1);
+        }
+      });
+    });
+    it('reset returns to the empty foundation of the same blueprint', () => {
+      expect(reset(fullRun(bp).p)).toEqual(initialProgress(bp));
+    });
+    it('a piece not in the recipe is wrongPiece and leaves progress unchanged', () => {
+      const p = grounded(bp);
+      for (const t of ['paint', 'cone', 'concrete'] as PieceTypeId[]) {
+        const r = deliver(p, t);
+        expect(r.result).toBe('wrongPiece');
+        expect(r.progress).toBe(p);
       }
-    }
+    });
   });
+}
 
-  it('reset returns to the empty foundation', () => {
-    const { p } = fullRun();
-    expect(reset(p)).toEqual(initialProgress());
+// ---------------------------------------------------------------- feature 004: mixed recipes
+
+describe('progression 004: two materials per stage', () => {
+  it('a mixed-order Frame (brick, beam, beam, brick, beam, beam) completes on the 6th piece', () => {
+    let p = grounded();
+    const order: PieceTypeId[] = ['brick', 'beam', 'beam', 'brick', 'beam', 'beam'];
+    const filled: number[][] = [];
+    const results: string[] = [];
+    for (const t of order) {
+      const r = deliver(p, t, 'hand');
+      results.push(r.result);
+      p = r.progress;
+      filled.push([...p.filled]);
+    }
+    expect(results).toEqual(['snapped', 'snapped', 'snapped', 'snapped', 'snapped', 'stageComplete']);
+    expect(filled.slice(0, 5)).toEqual([[0, 1], [1, 1], [2, 1], [2, 2], [3, 2]]);
+    expect(p).toMatchObject({ completedStages: 1, highFilled: 0 });
+    expect(p.filled).toEqual([0, 0]); // Walls & Floors: brick, beam
+  });
+  for (let si = 0; si < 6; si++) {
+    it(`stage ${si + 1} completes in any (seeded) order, only on the last piece`, () => {
+      for (const seed of [1, 7, 42]) {
+        let p = toStage(si + 1);
+        const steps = shuffle(stageDeliveries(CLOCK_TOWER, si), seed + si);
+        steps.forEach(([t, via, high], k) => {
+          const r = deliver(p, t, via, { high });
+          const last = k === steps.length - 1;
+          expect(r.result).toBe(last ? (si === 5 ? 'masterpiece' : 'stageComplete') : 'snapped');
+          p = r.progress;
+        });
+        expect(p.completedStages).toBe(si + 1);
+      }
+    });
+  }
+  it('the Masterpiece waits for both the bell and the decor crate, in either order', () => {
+    const base = toStage(6);
+    const a = deliver(base, 'decor', 'hand');
+    expect(a.result).toBe('snapped');
+    expect(deliver(a.progress, 'bell', 'crane', { high: true }).result).toBe('masterpiece');
+    const b = deliver(base, 'bell', 'crane', { high: true });
+    expect(b.result).toBe('snapped');
+    expect(deliver(b.progress, 'decor', 'hand').result).toBe('masterpiece');
+  });
+  it('per-material open slots', () => {
+    const p = toStage(3); // panel×4 (high 3) + beam×2
+    expect(openSlotsOf(p, 'panel')).toEqual({ ordinary: 1, high: 3 });
+    expect(openSlotsOf(p, 'beam')).toEqual({ ordinary: 2, high: 0 });
+    expect(openSlotsOf(p, 'paint')).toEqual({ ordinary: 0, high: 0 });
+    expect(openSlots(p)).toEqual({ hand: 3, high: 3 });
   });
 });
 
-// ---------------------------------------------------------------- feature 003: Groundwork and high slots
+describe('progression 004: refusals (data-model §5 order)', () => {
+  it('a complete material is surplus and leaves progress unchanged', () => {
+    let p = grounded();
+    p = deliver(p, 'brick').progress;
+    p = deliver(p, 'brick').progress;
+    const r = deliver(p, 'brick');
+    expect(r.result).toBe('surplus');
+    expect(r.progress).toBe(p);
+    expect(deliver(p, 'brick', 'crane').result).toBe('surplus');
+  });
+  it('a hand or forklift panel is tooHigh once only the high panel slots remain', () => {
+    let p = toStage(3);
+    p = deliver(p, 'panel', 'hand').progress; // the one ordinary panel slot
+    for (const via of ['hand', 'forklift'] as Via[]) {
+      const r = deliver(p, 'panel', via);
+      expect(r.result).toBe('tooHigh');
+      expect(r.progress).toBe(p);
+    }
+    expect(deliver(p, 'beam', 'hand').result).toBe('snapped'); // the other material is unaffected
+  });
+  it('surplus beats tooHigh when the high material is complete', () => {
+    let p = toStage(3);
+    p = deliver(p, 'panel', 'hand').progress;
+    for (let i = 0; i < 3; i++) p = deliver(p, 'panel', 'crane', { high: true }).progress;
+    expect(deliver(p, 'panel', 'hand').result).toBe('surplus');
+    expect(deliver(p, 'panel', 'crane', { high: true }).result).toBe('surplus');
+  });
+  it('the crane fills an ordinary slot when aimed at one, and a high slot when only high ones remain', () => {
+    let p = toStage(3);
+    p = deliver(p, 'panel', 'crane', { high: false }).progress;
+    expect(p).toMatchObject({ filled: [1, 0], highFilled: 0 });
+    p = deliver(p, 'panel', 'crane').progress; // no ordinary panel slot left → high
+    expect(p).toMatchObject({ filled: [2, 0], highFilled: 1 });
+    p = deliver(p, 'beam', 'crane').progress; // a beam by crane takes a beam slot
+    expect(p).toMatchObject({ filled: [2, 1], highFilled: 1 });
+    p = deliver(p, 'beam', 'crane', { high: true }).progress; // beams have no high slots: ordinary
+    expect(p).toMatchObject({ filled: [2, 2], highFilled: 1 });
+  });
+  it('the bell needs the crane; the decor crate goes by hand', () => {
+    const p = toStage(6);
+    expect(deliver(p, 'bell', 'hand').result).toBe('tooHigh');
+    expect(deliver(p, 'bell', 'forklift').result).toBe('tooHigh');
+    expect(deliver(p, 'decor', 'forklift').result).toBe('snapped');
+  });
+});
 
+describe('progression 004: needs', () => {
+  it('needsOf lists every material in recipe order with left / highLeft / craneOnly / done', () => {
+    let p = toStage(3);
+    expect(needsOf(p)).toEqual([
+      { type: 'panel', total: 4, left: 4, highLeft: 3, craneOnly: false, done: false },
+      { type: 'beam', total: 2, left: 2, highLeft: 0, craneOnly: false, done: false },
+    ]);
+    p = deliver(p, 'panel').progress;
+    p = deliver(p, 'beam').progress;
+    p = deliver(p, 'beam').progress;
+    expect(needsOf(p)).toEqual([
+      { type: 'panel', total: 4, left: 3, highLeft: 3, craneOnly: true, done: false },
+      { type: 'beam', total: 2, left: 0, highLeft: 0, craneOnly: false, done: true },
+    ]);
+    expect(neededSupplies(p)).toEqual(['panel']);
+  });
+  it('Groundwork and the finished tower have no needs; supplies follow Groundwork', () => {
+    const p = initialProgress();
+    expect(needsOf(p)).toEqual([]);
+    expect(neededSupplies(p)).toEqual([]);
+    expect(neededSupply(p)).toBeNull();
+    let d = p;
+    for (let i = 0; i < 6; i++) d = dig(d);
+    expect(neededSupplies(d)).toEqual(['cement']);
+    expect(neededSupplies(grounded())).toEqual(['beam', 'brick']);
+    expect(needsOf(fullRun(CLOCK_TOWER).p)).toEqual([]);
+  });
+});
 
-const dug = (p: TowerProgress = initialProgress()): TowerProgress => {
-  for (let i = 0; i < 6; i++) p = dig(p);
-  return p;
-};
-const grounded = (p: TowerProgress = initialProgress()): TowerProgress => {
-  p = dug(p);
-  for (let i = 0; i < 4; i++) p = pour(p).progress;
-  return p;
-};
-/** Fills stages until `stage` (1-based) is current, using the crane for high slots. */
-const toStage = (stage: number): TowerProgress => {
-  let p = grounded();
-  while (p.completedStages < stage - 1) {
-    const st = CLOCK_TOWER.stages[p.completedStages]!;
-    for (let i = 0; i < st.slotCount - st.highSlots; i++) p = deliver(p, st.pieceType, 'hand').progress;
-    for (let i = 0; i < st.highSlots; i++) p = deliver(p, st.pieceType, 'crane', { high: true }).progress;
-  }
-  return p;
-};
+// ---------------------------------------------------------------- feature 003: Groundwork (unchanged rules)
 
-describe('progression v2: Groundwork', () => {
+describe('progression: Groundwork', () => {
+  const dug = (p: TowerProgress = initialProgress()): TowerProgress => {
+    for (let i = 0; i < 6; i++) p = dig(p);
+    return p;
+  };
   it('starts with Groundwork at 0', () => {
     const p = initialProgress();
-    expect(p).toMatchObject({ groundDug: 0, groundPoured: 0, highFilled: 0, completedStages: 0, filledSlots: 0 });
     expect(groundworkDone(p)).toBe(false);
-    expect(neededSupply(p)).toBeNull(); // digging needs no piece
   });
   it('dig caps at 6', () => {
     let p = initialProgress();
     for (let i = 0; i < 9; i++) p = dig(p);
     expect(p.groundDug).toBe(6);
-    const same = dig(p);
-    expect(same).toBe(p);
+    expect(dig(p)).toBe(p);
   });
   it('pour needs the pit dug and caps at 4; the 4th completes Groundwork', () => {
     expect(pour(initialProgress()).result).toBe('notDug');
@@ -129,7 +263,6 @@ describe('progression v2: Groundwork', () => {
     for (let i = 0; i < 5; i++) p = dig(p);
     expect(pour(p).result).toBe('notDug');
     p = dug();
-    expect(neededSupply(p)).toBe('cement');
     const results: string[] = [];
     for (let i = 0; i < 4; i++) {
       const r = pour(p);
@@ -140,7 +273,6 @@ describe('progression v2: Groundwork', () => {
     expect(groundworkDone(p)).toBe(true);
     expect(pour(p).result).toBe('alreadyPoured');
     expect(pour(p).progress).toBe(p);
-    expect(neededSupply(p)).toBe('beam');
   });
   it('deliveries before Groundwork is done are groundworkFirst, by any route, concrete included', () => {
     for (const via of ['hand', 'forklift', 'crane'] as Via[]) {
@@ -151,69 +283,13 @@ describe('progression v2: Groundwork', () => {
       }
     }
   });
-  it('after Groundwork a wrong piece is wrongPiece and a beam snaps', () => {
-    const p = grounded();
-    expect(deliver(p, 'brick', 'hand').result).toBe('wrongPiece');
-    expect(deliver(p, 'concrete', 'hand').result).toBe('wrongPiece');
-    expect(deliver(p, 'beam', 'hand').result).toBe('snapped');
-  });
-});
-
-describe('progression v2: high slots', () => {
-  it('hand and forklift deliveries are tooHigh once only high slots remain', () => {
-    let p = toStage(3);
-    expect(p.completedStages).toBe(2);
-    for (let i = 0; i < 3; i++) {
-      const r = deliver(p, 'panel', i % 2 ? 'forklift' : 'hand');
-      expect(r.result).toBe('snapped');
-      p = r.progress;
-    }
-    expect(p).toMatchObject({ filledSlots: 3, highFilled: 0 });
-    for (const via of ['hand', 'forklift'] as Via[]) {
-      const r = deliver(p, 'panel', via);
-      expect(r.result).toBe('tooHigh');
-      expect(r.progress).toBe(p);
-    }
-  });
-  it('a crane delivery to a high slot increments highFilled; to a hand slot it does not', () => {
-    let p = toStage(3);
+  it('legacy towers keep the 003 high-slot rules (6 panels, 3 by crane)', () => {
+    let p = toStage(3, CLOCK_TOWER_V1);
+    for (let i = 0; i < 3; i++) p = deliver(p, 'panel', i % 2 ? 'forklift' : 'hand').progress;
+    expect(p).toMatchObject({ filled: [3], highFilled: 0 });
+    expect(deliver(p, 'panel', 'hand').result).toBe('tooHigh');
     p = deliver(p, 'panel', 'crane', { high: true }).progress;
-    expect(p).toMatchObject({ filledSlots: 1, highFilled: 1 });
-    p = deliver(p, 'panel', 'crane', { high: false }).progress;
-    expect(p).toMatchObject({ filledSlots: 2, highFilled: 1 });
-    p = deliver(p, 'panel', 'crane').progress; // no slot info = a hand slot
-    expect(p).toMatchObject({ filledSlots: 3, highFilled: 1 });
-  });
-  it('the crane cannot fill more high slots than the stage has', () => {
-    let p = toStage(3);
-    for (let i = 0; i < 3; i++) p = deliver(p, 'panel', 'crane', { high: true }).progress;
-    expect(p.highFilled).toBe(3);
-    const r = deliver(p, 'panel', 'crane', { high: true });
-    expect(r.result).toBe('snapped'); // falls back to a free hand slot
-    expect(r.progress).toMatchObject({ filledSlots: 4, highFilled: 3 });
-  });
-  it('highFilled resets when the stage completes; the bell needs the crane', () => {
-    let p = toStage(3);
-    for (let i = 0; i < 3; i++) p = deliver(p, 'panel', 'hand').progress;
-    for (let i = 0; i < 2; i++) p = deliver(p, 'panel', 'crane', { high: true }).progress;
-    const r = deliver(p, 'panel', 'crane', { high: true });
-    expect(r.result).toBe('stageComplete');
-    expect(r.progress).toMatchObject({ completedStages: 3, filledSlots: 0, highFilled: 0 });
-    p = toStage(6);
-    expect(deliver(p, 'bell', 'hand').result).toBe('tooHigh');
-    expect(deliver(p, 'bell', 'forklift').result).toBe('tooHigh');
-    expect(deliver(p, 'bell', 'crane', { high: true }).result).toBe('masterpiece');
-  });
-  it('stars are unchanged: 1 per stage, 5 at the Masterpiece', () => {
-    let p = grounded();
-    const stars: number[] = [];
-    for (const st of CLOCK_TOWER.stages) {
-      for (let i = 0; i < st.slotCount - st.highSlots; i++) p = deliver(p, st.pieceType, 'hand').progress;
-      for (let i = 0; i < st.highSlots; i++) p = deliver(p, st.pieceType, 'crane', { high: true }).progress;
-      stars.push(starsOf(p));
-    }
-    expect(stars).toEqual([1, 2, 3, 4, 5, 5]);
-    expect(isMasterpiece(p)).toBe(true);
-    expect(reset(p)).toEqual(initialProgress());
+    expect(p).toMatchObject({ filled: [4], highFilled: 1 });
+    expect(deliver(p, 'beam', 'hand').result).toBe('wrongPiece');
   });
 });

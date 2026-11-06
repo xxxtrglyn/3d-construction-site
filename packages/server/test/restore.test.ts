@@ -2,14 +2,15 @@ import { rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
-import { CLOSE, SITE, machineId, parkedState } from '@hht/shared';
+import { DatabaseSync } from 'node:sqlite';
+import { CLOCK_TOWER, CLOSE, SITE, machineId, needsOf, parkedState } from '@hht/shared';
 import type { RunningServer } from '../src/server.ts';
 import { boot, joinPlayer, newKey, sleep, until, worldOf } from './helpers.ts';
 import { helpersFor } from './world-helpers.ts';
 import { machineHelpersFor } from './machine-helpers.ts';
 
 let server: RunningServer;
-const { S, host, dropAt, plotState } = helpersFor(() => server);
+const { S, host, dropAt, plotState, filledOf, progressOf, deliverRecipe } = helpersFor(() => server);
 const dbFile = join(tmpdir(), `hht-restore-${process.pid}-${Date.now()}.sqlite`);
 afterEach(async () => {
   await server?.close();
@@ -33,9 +34,10 @@ describe('restart restore', () => {
     a.send('dev', { op: 'fillStage', plot });
     await until(() => plotState(plot).completedStages === 1);
     const d = SITE.plots[plot]!;
+    // Walls & Floors (feature 004): a brick into the tower, a beam (also needed) donated to the bin
     await dropAt(a, d.x, d.z, 'brick');
-    await dropAt(o, d.bin.x, d.bin.z, 'paint');
-    await until(() => plotState(plot).filledSlots === 1 && plotState(plot).bin.length === 1);
+    await dropAt(o, d.bin.x, d.bin.z, 'beam');
+    await until(() => plotState(plot).filledA === 1 && plotState(plot).bin.length === 1);
     const endsAt = worldOf(server).state.shift.endsAt;
     const closing = a.waitFor('correction', undefined, 100).catch(() => null);
     void closing;
@@ -47,10 +49,11 @@ describe('restart restore', () => {
     const p = plotState(plot);
     expect(p.state).toBe('building');
     expect(p.completedStages).toBe(1);
-    expect(p.filledSlots).toBe(1);
+    expect(p).toMatchObject({ blueprintId: 'clock-tower', filledA: 1, filledB: 0 });
+    expect(filledOf(plot)).toBe(1);
     expect(p.joinMode).toBe('open');
     expect(p.crewSize).toBe(2);
-    expect(Array.from(p.bin)).toEqual(['paint']);
+    expect(Array.from(p.bin)).toEqual(['beam']);
     expect(p.hostName).toBe('Sunny Bolt');
     expect(worldOf(server).state.shift.endsAt).toBe(endsAt);
     const a2 = await joinPlayer(server, { key: keyA, name: 'Sunny Bolt' });
@@ -130,6 +133,51 @@ describe('restart restore (feature 003)', () => {
     expect(w.pieces.size).toBe(0); // the hooked beam is not restored
     const a2 = await joinPlayer(server, { key: a.key });
     expect(S(a2).crewPlot).toBe(plot);
+    await a2.leave();
+  }, 30_000);
+});
+
+describe('restart restore (feature 004)', () => {
+  it('a restored legacy clock-tower-v1 building in Walls (filled_a = 5) needs 3 bricks only and completes Walls; after a shift reset the plot builds clock-tower', async () => {
+    const opts = { db: dbFile, timers: { bootGraceS: 30, warnS: 1, countdownS: 1 } };
+    server = await boot(opts);
+    const key = newKey();
+    const a = await joinPlayer(server, { key });
+    const plot = await host(a);
+    await server.close();
+    // a building stored before 004: the v2 → v3 migration marks it clock-tower-v1 with filled_a = the old filled_slots
+    const raw = new DatabaseSync(dbFile);
+    raw.prepare("UPDATE building SET blueprint_id = 'clock-tower-v1', completed_stages = 1, filled_a = 5, filled_b = 0, high_filled = 0 WHERE world_id = 1 AND plot_index = ?").run(plot);
+    raw.close();
+
+    server = await boot(opts);
+    expect(plotState(plot)).toMatchObject({ state: 'building', blueprintId: 'clock-tower-v1', completedStages: 1, filledA: 5, filledB: 0 });
+    expect(progressOf(plot)).toMatchObject({ blueprintId: 'clock-tower-v1', filled: [5] });
+    expect(needsOf(progressOf(plot))).toEqual([{ type: 'brick', total: 8, left: 3, highLeft: 0, craneOnly: false, done: false }]);
+    const a2 = await joinPlayer(server, { key });
+    expect(S(a2).crewPlot).toBe(plot);
+    const d = SITE.plots[plot]!;
+    // a beam (part of the new Walls recipe) is a wrong piece for the legacy recipe
+    await dropAt(a2, d.x, d.z, 'beam');
+    expect(await a2.waitFor('hint')).toEqual({ kind: 'wrongPiece', needed: ['brick'] });
+    expect(worldOf(server).systems.pieces.size).toBe(1);
+    expect(plotState(plot).filledA).toBe(5);
+    // 3 bricks complete Walls & Floors; the legacy recipe goes on (Roof: panel×6)
+    expect(await deliverRecipe(a2, plot, 3)).toEqual(['brick', 'brick', 'brick']);
+    await until(() => plotState(plot).completedStages === 2);
+    expect(plotState(plot)).toMatchObject({ blueprintId: 'clock-tower-v1', filledA: 0, filledB: 0 });
+    expect(needsOf(progressOf(plot)).map((n) => [n.type, n.total])).toEqual([['panel', 6]]);
+    const row = server.ctx.db.sql.prepare('SELECT blueprint_id, completed_stages, filled_a, filled_b FROM building WHERE world_id = 1 AND plot_index = ?').get(plot);
+    expect(row).toEqual({ blueprint_id: 'clock-tower-v1', completed_stages: 2, filled_a: 0, filled_b: 0 });
+    // shift reset: the legacy building goes; a new building on that plot uses the current recipe
+    await sleep(550);
+    a2.send('dev', { op: 'endShiftIn', seconds: 1 });
+    await until(() => plotState(plot).state === 'free', 8000);
+    await a2.waitFor('summary');
+    expect(await host(a2)).toBe(plot);
+    expect(plotState(plot)).toMatchObject({ state: 'building', blueprintId: 'clock-tower', completedStages: 0, filledA: 0, filledB: 0 });
+    expect(progressOf(plot).blueprintId).toBe('clock-tower');
+    expect(needsOf(progressOf(plot)).map((n) => [n.type, n.total])).toEqual(CLOCK_TOWER.stages[0]!.recipe.map((r) => [r.type, r.count]));
     await a2.leave();
   }, 30_000);
 });

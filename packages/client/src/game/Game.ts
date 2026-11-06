@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import {
   selectGuidance,
-  CLOCK_TOWER, HAT_COLORS, MACHINE, MOVE, PIECE_TYPES, INTERACT, currentStage, entryPoint, groundworkDone, groundworkPart, towerBlocker,
+  CLOCK_TOWER, HAT_COLORS, MACHINE, MOVE, PIECE_TYPES, INTERACT, currentStage, entryPoint, groundworkDone, groundworkPart, needsOf, openSlotRefs, stageHandSlots, towerBlocker,
   type MachineKind, type PieceTypeId, type SiteLayout,
 } from '@hht/shared';
 import { MachineRenderer } from '../machines/MachineRenderer.ts';
@@ -36,7 +36,8 @@ import type { RenderContext } from '../render/renderer.ts';
 import { Hud } from '../ui/hud.ts';
 import { LOT_HALF, OBSTACLES, PLAY_HALF, RACK_DISPLAY, RACK_HALF, readLayout, soloSite, type Layout } from '../world/layout.ts';
 import { PieceRenderer } from '../world/pieceRenderer.ts';
-import { SlotMarkers } from '../world/slotMarkers.ts';
+import { SlotGhosts } from '../world/slotGhosts.ts';
+import { hintLine, pluralNoun } from '../ui/needsText.ts';
 import { TowerView } from '../world/towerView.ts';
 import { findTarget, type Target } from './interaction.ts';
 import { PieceManager, type Piece } from './pieceManager.ts';
@@ -65,7 +66,7 @@ export class Game extends GameShell {
   pieces!: PieceManager;
   plot!: TowerPlot;
   tower!: TowerView;
-  markers!: SlotMarkers;
+  ghosts!: SlotGhosts;
   pieceRenderer!: PieceRenderer;
   puffs!: Puffs;
   celebration!: Celebration;
@@ -142,13 +143,13 @@ export class Game extends GameShell {
     this.pieceRenderer = new PieceRenderer(this.assets.get('pieces') as THREE.Group);
     scene.add(this.pieceRenderer.group);
 
-    this.markers = new SlotMarkers();
-    scene.add(this.markers.group);
+    this.ghosts = new SlotGhosts(this.assets.get('pieces') as THREE.Group);
+    scene.add(this.ghosts.group);
     this.tower = new TowerView(this.assets, this.layout.plot);
     scene.add(this.tower.group);
-    this.plot = new TowerPlot(this.layout.plot, this.pieces, (i) => this.markers.slotPosition(i), {
-      onSnap: (piece, result, progress) => this.onSnap(piece, result, progress.filledSlots),
-      onWrong: (piece, needed, reason) => this.onWrong(piece, needed, reason),
+    this.plot = new TowerPlot(this.layout.plot, this.pieces, (i) => this.slotPosition(i), {
+      onSnap: (piece, result, progress) => this.onSnap(piece, result, progress.filled.reduce((a, b) => a + b, 0)),
+      onWrong: (piece, needed, reason, type) => this.onWrong(piece, needed, reason, type),
       onGround: (progress, done) => this.onGround(progress.groundDug, progress.groundPoured, done),
       onStageComplete: () => this.onStageComplete(),
       onMasterpiece: () => this.onMasterpiece(),
@@ -267,8 +268,7 @@ export class Game extends GameShell {
     // feature 003: the pit shows instead of the foundation during Groundwork
     this.tower.group.visible = !this.plot.inGroundwork;
     const stage = this.plot.stage;
-    this.markers.layout(this.layout.plot, stage ? stage.slotCount - stage.highSlots : 0);
-    this.markers.setFilled(pr.filledSlots - pr.highFilled, !this.plot.masterpiece && !this.plot.inGroundwork);
+    this.updateGhosts();
     this.tower.sign.set(this.plot.stars, this.plot.masterpiece);
     this.hud.setStage(this.plot.inGroundwork ? 'Groundwork' : (stage?.name ?? 'Masterpiece'), this.plot.stars, this.plot.masterpiece);
     this.updateNeed();
@@ -294,17 +294,27 @@ export class Game extends GameShell {
     }
   }
 
-  /** The HUD's "what next" line: Groundwork parts and crane steps name the machine (FR-022). */
+  /** The HUD's "what next" line: Groundwork parts name the machine (003 FR-022); stages show per-material chips (004 FR-013). */
   private updateNeed(): void {
     const pr = this.plot.progress;
     const part = groundworkPart(pr);
-    const stage = this.plot.stage;
-    if (part === 'dig') return this.hud.setNeedText(`🚜 Dig ${pr.groundDug}/${CLOCK_TOWER.groundwork.scoops}`);
-    if (part === 'concrete') return this.hud.setNeedText(`🥣 Concrete ${pr.groundPoured}/${CLOCK_TOWER.groundwork.concrete}`);
-    if (stage && stage.highSlots > 0 && pr.filledSlots - pr.highFilled >= stage.slotCount - stage.highSlots) {
-      return this.hud.setNeedText(stage.pieceType === 'bell' ? '🏗️ Bell · crane slot' : `🏗️ Roof ${pr.highFilled}/${stage.highSlots} · crane slots`);
-    }
-    this.hud.setNeed(this.plot.needed, pr.filledSlots - pr.highFilled, stage ? stage.slotCount - stage.highSlots : 0);
+    if (part === 'dig') return this.hud.setNeedText(`🚜 Dig ${pr.groundDug}/${CLOCK_TOWER.groundwork.scoops}: use the excavator`);
+    if (part === 'concrete') return this.hud.setNeedText(`🥣 Concrete ${pr.groundPoured}/${CLOCK_TOWER.groundwork.concrete}: use the mixer`);
+    this.hud.setNeeds(needsOf(pr));
+  }
+
+  /** feature 004: arc position of hand slot `i` of the current stage (the shared typed layout). */
+  private slotPosition(i: number): THREE.Vector3 {
+    const st = this.plot.stage;
+    const s = st ? stageHandSlots(this.site.plots[0]!, st)[i] : undefined;
+    return s ? new THREE.Vector3(s.x, this.layout.plot.y + s.y, s.z) : this.layout.plot.clone();
+  }
+
+  /** feature 004 (FR-011): ghosts of the open ordinary slots, typed by material. */
+  private updateGhosts(): void {
+    const pr = this.plot.progress;
+    if (this.plot.masterpiece || this.plot.inGroundwork) return this.ghosts.set([]);
+    this.ghosts.set(openSlotRefs(this.site.plots[0]!, this.layout.machines, pr).filter((s) => !s.high));
   }
 
   private onGround(dug: number, poured: number, done: boolean): void {
@@ -333,10 +343,8 @@ export class Game extends GameShell {
   }
 
   private onSnap(piece: Piece | null, _result: string, filled: number): void {
-    const stage = this.plot.stage;
-    this.markers.setFilled(this.plot.progress.filledSlots - this.plot.progress.highFilled, !this.plot.masterpiece);
+    this.updateGhosts();
     this.updateNeed();
-    void stage;
     this.sfx.play('snap');
     this.hud.showToast(successText('snap')!);
     const at = piece ? piece.position.clone() : this.layout.plot.clone().add(new THREE.Vector3(0, 0.5, 2.3));
@@ -345,14 +353,16 @@ export class Game extends GameShell {
     this.emit('snapped', { filled });
   }
 
-  private onWrong(piece: Piece | null, needed: PieceTypeId | null, reason?: string): void {
+  private onWrong(piece: Piece | null, needed: PieceTypeId[], reason: string, type: PieceTypeId): void {
     this.sfx.play('wrong');
-    if (reason === 'groundworkFirst') this.hud.showToast(recoveryText('groundworkFirst', needed, groundworkPart(this.plot.progress) ?? undefined), 2.6);
+    const stage = this.plot.stage?.name ?? null;
+    if (reason === 'groundworkFirst') this.hud.showToast(recoveryText('groundworkFirst', null, groundworkPart(this.plot.progress) ?? undefined), 2.6);
     else if (reason === 'tooHigh') this.hud.showToast(recoveryText('tooHigh'), 2.6);
-    else if (!needed) this.hud.showToast('The tower is finished! Press “Build again” to start over.');
-    else if (piece?.type === 'cone') this.hud.showToast(`Cones are just for fun! The tower needs: ${PIECE_TYPES[needed].label}`);
-    else this.hud.showToast(recoveryText('wrongPiece', needed));
-    this.emit('wrongPiece', { needed });
+    else if (this.plot.masterpiece) this.hud.showToast('The tower is finished! Press “Build again” to start over.');
+    else if (type === 'cone') this.hud.showToast(`Cones are just for fun! The tower needs ${needed.map(pluralNoun).join(' and ')}`);
+    else if (reason === 'surplus') this.hud.showToast(hintLine({ kind: 'surplus', type, needed }, stage) ?? '');
+    else this.hud.showToast(hintLine({ kind: 'wrongPiece', needed }, stage) ?? '');
+    this.emit('wrongPiece', { needed, reason, type });
   }
 
   private onStageComplete(): void {
@@ -506,7 +516,7 @@ export class Game extends GameShell {
     this.controller.teleport(new THREE.Vector3(at.x, 0.05, at.z), at.yaw);
     this.camera.yaw = at.yaw + Math.PI;
     this.machineCams.exit();
-    this.machineHints.hide();
+    this.machineHints.leave();
     this.touch?.setMachineMode(null);
     this.sfx.pruneLoops(new Set());
     this.emit('machineExit');
@@ -581,7 +591,7 @@ export class Game extends GameShell {
     if (nowSeated) {
       const l = this.machines.label();
       this.hud.setPrompt(l.text, controlLabels(this.actions.lastDevice).action, l.disabled);
-      this.touch?.setMachineMode({ action: l.text, disabled: l.disabled, toss: this.machines.kindAt(this.machines.seated) === 'crane' ? 'Camera' : null });
+      this.touch?.setMachineMode({ action: l.text, disabled: l.disabled, toss: 'Camera' });
       this.machineHints.update(a.lastDevice);
     } else if (this.machineTargetId >= 0) this.hud.setPrompt(`Get in ${MACHINE_NAME[this.machines.kindAt(this.machineTargetId)]}`, controlLabels(this.actions.lastDevice).action);
     else this.hud.setPrompt(null);
@@ -608,7 +618,7 @@ export class Game extends GameShell {
 
     this.pieces.update(dt);
     this.plot.update(dt);
-    this.markers.update(dt);
+    this.ghosts.update(dt);
     this.puffs.update(dt);
     this.celebration.update(dt);
     ghostMaterial.uniforms.uTime!.value += dt;

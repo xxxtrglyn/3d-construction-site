@@ -9,11 +9,12 @@ test('reduced motion and muted audio preserve refusal recovery and progress', as
   await expect(page.locator('.hud-toast')).toContainText('excavator');
   expect((await state(page)).tower.filledSlots).toBe(0);
   await debug(page, 'completeGroundwork');
-  expect(await debug(page, 'deliver', 'brick')).toBe('wrongPiece');
-  await expect(page.locator('.hud-toast')).toContainText('rack');
+  // paint is not in the Frame's recipe (beams + bricks): the shared needs text names what is needed
+  expect(await debug(page, 'deliver', 'paint')).toBe('wrongPiece');
+  await expect(page.locator('.hud-toast')).toContainText('needs beams and bricks');
   expect((await state(page)).tower.filledSlots).toBe(0);
   await debug(page, 'completeStage'); await debug(page, 'completeStage');
-  for (let i = 0; i < 3; i++) await debug(page, 'deliver', 'panel');
+  await debug(page, 'deliver', 'panel'); // the Roof's one ordinary panel slot; the other 3 are crane-only
   expect(await debug(page, 'deliver', 'panel')).toBe('tooHigh');
   await expect(page.locator('.hud-toast')).toContainText('striped pad');
   expect(errors).toEqual([]);
@@ -28,7 +29,7 @@ test('server refusal events remain local, actionable, and do not show success', 
     [{ kind: 'mixerFull' }, 'ground'],
     [{ kind: 'notCrew' }, 'Join this crew'],
     [{ kind: 'tooHigh' }, 'striped pad'],
-    [{ kind: 'wrongPiece', needed: 'beam' }, 'rack'],
+    [{ kind: 'wrongPiece', needed: ['beam'] }, 'needs beams'],
   ] as const;
   for (const [payload, expected] of refusals) {
     await page.evaluate(detail => {

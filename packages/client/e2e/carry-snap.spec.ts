@@ -15,11 +15,12 @@ test('a matching piece dropped in the build zone snaps; a wrong one is refused',
   await page.keyboard.up('KeyE');
   await expect.poll(async () => (await state(page)).tower.filledSlots, { timeout: 5_000 }).toBe(1);
 
-  await debug(page, 'give', 'brick');
+  // feature 004: the Frame takes beams and bricks; paint is not in its recipe
+  await debug(page, 'give', 'paint');
   await page.keyboard.press('KeyE');
   await expect.poll(() => events(page), { timeout: 5_000 }).toContain('wrongPiece');
   const s = await state(page);
-  expect(s.tower).toMatchObject({ completedStages: 0, filledSlots: 1 });
+  expect(s.tower).toMatchObject({ completedStages: 0, filledSlots: 1, filled: [1, 0] });
   expect(await events(page)).toEqual(expect.arrayContaining(['drop', 'snapped', 'wrongPiece']));
 });
 

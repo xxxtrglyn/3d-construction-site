@@ -63,7 +63,7 @@ def asset_specs():
         specs.append(dict(id=f'clock-tower-stage-{n}-merged', group='deferred', build=(lambda n=n: clock_tower.build(n)),
                           groups=[f'ClockTower_Stage{n}'], keep=['Sign_Stars'], scale=clock_tower.TOWER_SCALE, vcol='keep-special', decimate=20000))
         # LOD1: everything in one vertex-colored mesh, decimated (1 draw, critical so far towers show at once)
-        specs.append(dict(id=f'clock-tower-lod1-{n}', group='critical', build=(lambda n=n: clock_tower.build(n)),
+        specs.append(dict(id=f'clock-tower-lod1-{n}', group='critical', build=(lambda n=n: clock_tower.build(n, lod=True)),
                           groups=[f'ClockTower_Stage{n}'], keep=[], scale=clock_tower.TOWER_SCALE, vcol='all', decimate=2500))
     # feature 003: the four machines (rig parts, one vertex-colored toon mesh per part) + LOD1 (one mesh, ≤ 600 tris).
     # Deferred: they stream in after play starts, with placeholders until then (FR-038).

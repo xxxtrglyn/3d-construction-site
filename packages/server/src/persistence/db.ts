@@ -3,7 +3,7 @@ import { dirname, resolve } from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import { performance } from 'node:perf_hooks';
 
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 export interface Db {
   readonly sql: DatabaseSync;
@@ -49,7 +49,28 @@ function migrateV1toV2(sql: DatabaseSync): void {
   }
 }
 
-/** Opens (or creates) the database and applies the schema (contracts/persistence.sql), migrating v1 → v2. */
+/**
+ * v2 → v3 (feature 004, specs/004-mixed-material-stages/contracts/persistence-v3.sql): per-material
+ * progress columns; every building stored before 004 keeps the old one-material recipe
+ * (`clock-tower-v1`) until it finishes or the shift resets (FR-004).
+ */
+function migrateV2toV3(sql: DatabaseSync): void {
+  sql.exec('BEGIN');
+  try {
+    sql.exec(`
+      ALTER TABLE building RENAME COLUMN filled_slots TO filled_a;
+      ALTER TABLE building ADD COLUMN filled_b INTEGER NOT NULL DEFAULT 0 CHECK (filled_b >= 0);
+      UPDATE building SET blueprint_id = 'clock-tower-v1';
+      UPDATE meta SET value = '3' WHERE key = 'schema_version';
+    `);
+    sql.exec('COMMIT');
+  } catch (e) {
+    sql.exec('ROLLBACK');
+    throw e;
+  }
+}
+
+/** Opens (or creates) the database and applies the schema (contracts/persistence.sql), migrating v1 → v2 → v3. */
 export function openDb(path: string): Db {
   if (path !== ':memory:') mkdirSync(dirname(resolve(path)), { recursive: true });
   const sql = new DatabaseSync(path);
@@ -57,8 +78,12 @@ export function openDb(path: string): Db {
   sql.exec(readFileSync(resolve(import.meta.dirname, 'schema.sql'), 'utf8'));
   const row = sql.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string } | undefined;
   if (!row) sql.prepare("INSERT INTO meta(key, value) VALUES ('schema_version', ?)").run(String(SCHEMA_VERSION));
-  else if (Number(row.value) === 1) migrateV1toV2(sql);
-  else if (Number(row.value) !== SCHEMA_VERSION) throw new Error(`database schema_version ${row.value} != ${SCHEMA_VERSION}`);
+  else {
+    const v = Number(row.value);
+    if (v === 1) migrateV1toV2(sql);
+    if (v === 1 || v === 2) migrateV2toV3(sql);
+    else if (v !== SCHEMA_VERSION) throw new Error(`database schema_version ${row.value} != ${SCHEMA_VERSION}`);
+  }
   let spent = 0;
   let depth = 0;
   return {

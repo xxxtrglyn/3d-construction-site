@@ -6,6 +6,9 @@
   box-shadow: 0 3px 0 rgba(0,0,0,.2); white-space: nowrap; will-change: transform; }
 .hud-need .dot { width: 18px; height: 18px; border-radius: 50%; border: 2px solid #2a1a1a; }
 .hud-need .count { opacity: .7; font-weight: 700; }
+.hud-need .dot { display: inline-block; vertical-align: -3px; margin-right: 4px; }
+.hud-need .needs .need { margin: 0 2px; }
+.hud-need .needs .need.done { opacity: .5; }
 .hud-arrow { position: fixed; left: 0; top: 0; width: 0; height: 0; border-left: 16px solid transparent; border-right: 16px solid transparent;
   border-top: 24px solid #ffcc2e; filter: drop-shadow(0 0 0 #2a1a1a) drop-shadow(0 3px 0 rgba(0,0,0,.25)); animation: hud-bounce .7s ease-in-out infinite; }
 .hud-arrow::after { content: ""; position: absolute; left: -10px; top: -20px; border-left: 10px solid transparent; border-right: 10px solid transparent; border-top: 15px solid #fff2b3; }
@@ -36,9 +39,17 @@
 .hud-error { position: fixed; inset: 0; display: flex; align-items: center; justify-content: center; text-align: center; padding: 24px; background: #b3dcfa; font-size: 18px; font-weight: 700; }
 @media (prefers-reduced-motion: reduce) { .hud-arrow { animation: none; } }
 
-.gameplay-guide { position:absolute; top:62px; left:50%; transform:translateX(-50%); width:min(420px, calc(100% - 32px)); text-align:center; pointer-events:auto; z-index:8; color:#243247; }
+.gameplay-guide { position:absolute; top:104px; left:50%; transform:translateX(-50%); width:min(420px, calc(100% - 32px)); text-align:center; pointer-events:auto; z-index:8; color:#243247; }
 .gameplay-guide [role=status] { background:#fff7df; border:2px solid #354259; border-radius:12px; padding:8px 12px; font-weight:700; box-shadow:0 3px 0 #35425933; }
 .gameplay-guide button, .machine-hint button { font:inherit; font-size:12px; border:1px solid #354259; background:#fff7df; border-radius:8px; padding:5px 9px; margin:4px; cursor:pointer; }
 .machine-hint { pointer-events:auto; max-width:min(390px, calc(100vw - 32px)); }
-@media (max-width:600px) { .gameplay-guide { top:82px; font-size:12px; width:calc(100% - 28px); } .machine-hint { top:165px; bottom:auto; font-size:12px; max-height:140px; overflow:auto; } }
+@media (max-width:600px) { .gameplay-guide { top:112px; font-size:12px; width:calc(100% - 28px); } .machine-hint { top:172px; bottom:auto; font-size:12px; max-height:140px; overflow:auto; } }
 @media (prefers-reduced-motion:reduce) { .guidance-arrow, .gameplay-guide, .machine-hint { animation:none!important; transition:none!important; } }
+/* feature 004: own-plot needs (multiplayer crew) */
+.hud-crewneeds { position: fixed; left: 50%; top: max(60px, calc(env(safe-area-inset-top) + 54px)); transform: translateX(-50%); max-width: calc(100vw - 32px);
+  display: flex; flex-wrap: wrap; justify-content: center; gap: 2px 8px; padding: 5px 12px; border-radius: 14px; background: rgba(255, 247, 230, .92);
+  border: 3px solid #2a1a1a; font-weight: 800; font-size: 14px; pointer-events: none; z-index: 5; }
+.hud-crewneeds.hidden { display: none; }
+.hud-crewneeds .who { opacity: .75; }
+.hud-crewneeds .dot { display: inline-block; width: 12px; height: 12px; border-radius: 50%; border: 2px solid #2a1a1a; vertical-align: -2px; margin-right: 3px; }
+.hud-crewneeds .need.done { opacity: .5; }

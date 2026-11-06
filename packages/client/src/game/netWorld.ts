@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import {
-  CLOCK_TOWER, PIECE_TYPES, SITE, arcPosition, currentStage, groundworkDone, groundworkPart, isPieceTypeId, machineId, starsOf,
+  CLOCK_TOWER, PIECE_TYPES, SITE, arcPosition, blueprintOf, currentStage, groundworkDone, groundworkPart, isPieceTypeId, machineId, needsOf, openSlotRefs, starsOf,
   type MachineKind, type PieceTypeId, type PlotDef, type ServerEvents, type SlotRef,
 } from '@hht/shared';
 import type { AssetStore } from '../assets/loader.ts';
@@ -9,12 +9,14 @@ import { Celebration } from '../fx/celebration.ts';
 import { Puffs } from '../fx/puff.ts';
 import { progressOf, type PieceView, type PlotView, type WorldView } from '../net/connection.ts';
 import { flagHtml } from '../ui/flags.ts';
+import { chipsHtml } from '../ui/needsText.ts';
 import { addOutline } from '../render/outline.ts';
 import { escapeHtml } from '../crowd/labels.ts';
 import type { PieceRenderer } from '../world/pieceRenderer.ts';
 import { RACK_DISPLAY } from '../world/layout.ts';
 import { GroundworkView, type GroundworkState } from '../world/groundworkView.ts';
 import { HighSlotRings } from '../world/highSlots.ts';
+import { SlotGhosts, type GhostSlot } from '../world/slotGhosts.ts';
 import { MachineCue } from '../world/machineCue.ts';
 import type { MachineViewPose } from '../machines/machineViews.ts';
 
@@ -110,6 +112,9 @@ export class NetWorld {
   readonly groundwork: GroundworkView;
   readonly cue = new MachineCue();
   readonly highSlots = new HighSlotRings();
+  // feature 004: typed ghosts of open ordinary slots (near plots + the own plot)
+  private ghosts: SlotGhosts | null = null;
+  private ghostKey = '';
   private readonly gwStates: Array<GroundworkState | null> = SITE.plots.map(() => null);
 
   constructor(assets: AssetStore, hudRoot: HTMLElement, sfx: Sfx, particles: number, shadows = true) {
@@ -208,10 +213,46 @@ export class NetWorld {
       const inGroundwork = !!p && p.state !== 'free' && !groundworkDone(progressOf(p));
       t.set(this.assets, p && p.state !== 'free' && !inGroundwork ? p.completedStages : -1, near.has(t.def.index));
     }
+    this.updateGhosts(dt, state, me, myPlot);
     this.animateForeman(me, talking);
     this.puffs.update(dt);
     for (const c of this.celebrations) c.update(dt);
     this.updateLabels(state, me, camera, myPlot);
+  }
+
+  /** Ghost counts per piece type (debug API `ghosts()`). */
+  ghostCounts(): Record<string, number> {
+    return Object.fromEntries(this.ghosts?.counts ?? []);
+  }
+
+  /** feature 004 (FR-011): ghosts for building plots within NEAR_DIST and the own plot; rebuilt only when their progress changes. */
+  private updateGhosts(dt: number, state: WorldView, me: THREE.Vector3, myPlot: number): void {
+    if (!this.ghosts) {
+      const src = this.assets.get('pieces-lod1') ?? this.assets.get('pieces');
+      if (!src) return;
+      this.ghosts = new SlotGhosts(src);
+      this.group.add(this.ghosts.group);
+    }
+    const show: number[] = [];
+    let key = '';
+    for (const d of SITE.plots) {
+      const p = state.plots[d.index];
+      if (!p || p.state !== 'building') continue;
+      if (d.index !== myPlot && Math.hypot(d.x - me.x, d.z - me.z) > NEAR_DIST) continue;
+      show.push(d.index);
+      key += `${d.index}:${p.blueprintId}:${p.completedStages}:${p.filledA}:${p.filledB}:${p.highFilled}:${p.groundDug}:${p.groundPoured}|`;
+    }
+    if (key !== this.ghostKey) {
+      this.ghostKey = key;
+      const slots: GhostSlot[] = [];
+      for (const i of show) {
+        const progress = progressOf(state.plots[i] as PlotView);
+        if (!groundworkDone(progress)) continue;
+        for (const s of openSlotRefs(SITE.plots[i]!, SITE.machines[i]!, progress)) if (!s.high) slots.push(s);
+      }
+      this.ghosts.set(slots);
+    }
+    this.ghosts.update(dt);
   }
 
   private animateForeman(me: THREE.Vector3, talking: boolean): void {
@@ -353,25 +394,16 @@ export class NetWorld {
   }
 }
 
-const PIECE_DOT: Record<string, string> = { beam: '#eb5a3d', brick: '#d9614a', panel: '#38a8b3', paint: '#9e73e6', decor: '#ff8cb8', bell: '#ffc74d', cement: '#c9c4b8', concrete: '#9a9893' };
-
-/** The sign's "what next" line (FR-022): Groundwork parts and crane steps name the machine to use. */
+/** The sign's "what next" line: Groundwork parts name the machine (003 FR-022); stages show per-material chips (004 FR-012). */
 export function plotNeedText(p: PlotView): string {
   const progress = progressOf(p);
+  const bp = blueprintOf(progress);
   const part = groundworkPart(progress);
-  if (part === 'dig') return `🚜 Dig ${progress.groundDug}/${CLOCK_TOWER.groundwork.scoops}: use the excavator`;
-  if (part === 'concrete') return `🥣 Concrete ${progress.groundPoured}/${CLOCK_TOWER.groundwork.concrete}: use the mixer`;
+  if (part === 'dig') return `🚜 Dig ${progress.groundDug}/${bp.groundwork.scoops}: use the excavator`;
+  if (part === 'concrete') return `🥣 Concrete ${progress.groundPoured}/${bp.groundwork.concrete}: use the mixer`;
   const stage = currentStage(progress);
   if (!stage) return '';
-  const dot = `<span class="dot" style="background:${PIECE_DOT[stage.pieceType] ?? '#ccc'}"></span>`;
-  const hand = stage.slotCount - stage.highSlots;
-  const handFilled = progress.filledSlots - progress.highFilled;
-  if (stage.highSlots > 0 && handFilled >= hand) {
-    if (stage.pieceType === 'bell') return `${dot}🏗️ Bell: use the crane`;
-    return `${dot}🏗️ Roof ${progress.highFilled}/${stage.highSlots}: use the crane`;
-  }
-  const crane = stage.highSlots > 0 ? ` · 🏗️ roof ${progress.highFilled}/${stage.highSlots} by crane` : '';
-  return `${dot}${PIECE_TYPES[stage.pieceType as PieceTypeId].label} ${handFilled}/${hand}${crane}`;
+  return `<span class="needs">${chipsHtml(needsOf(progress))}</span>`;
 }
 
 function plotLabelHtml(i: number, p: PlotView, mine: boolean): string {

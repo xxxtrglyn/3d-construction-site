@@ -9,7 +9,7 @@ type NetApi = {
     me(): { sessionId: string; netId: number; name: string; crew: { plot: number; role: string } | null; holding: string | null; position: [number, number, number] };
     players(): Array<{ sessionId: string; name: string; hatColor: string; crewPlot: number; crewRole: string; drawn: boolean }>;
     remotePosition(sid: string): [number, number, number] | null;
-    plots(): Array<{ index: number; state: string; completedStages: number; filledSlots: number; hostName: string; joinMode: string; crewSize: number; bin: string[] }>;
+    plots(): Array<{ index: number; state: string; blueprintId: string; completedStages: number; filledSlots: number; filledA: number; filledB: number; needs: Array<{ type: string; left: number; done: boolean; craneOnly: boolean }>; hostName: string; joinMode: string; crewSize: number; bin: string[]; groundPoured: number; highFilled: number }>;
     chatLog(): Array<{ from: string; channel: string; text: string; shown: boolean }>;
     send(type: string, payload: unknown): void;
     events: EventTarget;

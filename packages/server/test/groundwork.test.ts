@@ -6,7 +6,7 @@ import { machineHelpersFor } from './machine-helpers.ts';
 
 let server: RunningServer;
 const M = machineHelpersFor(() => server);
-const { S, host, enter, steps, press, rec, sys, plotState, dropAt } = M;
+const { S, host, enter, steps, press, rec, sys, plotState, dropAt, filledOf, handNeed } = M;
 afterEach(async () => {
   await server?.close();
 });
@@ -33,7 +33,7 @@ describe('Groundwork (US2)', () => {
     const d = SITE.plots[plot]!;
     await dropAt(a, d.x, d.z, 'beam');
     expect(await a.waitFor('hint')).toEqual({ kind: 'groundworkFirst', part: 'dig' });
-    expect(plotState(plot).filledSlots).toBe(0);
+    expect(filledOf(plot)).toBe(0);
     const pc = [...sys().pieces.values()][0]!;
     expect(Math.hypot(pc.x - d.x, pc.z - d.z)).toBeGreaterThan(d.buildZoneRadius);
     await a.leave();
@@ -137,8 +137,8 @@ describe('Groundwork (US2)', () => {
     expect(cel.plot).toBe(plot);
     expect((await a.waitFor('ground', (e) => e.done)).poured).toBe(4);
     // Frame unlocks
-    await dropAt(a, d.x, d.z, 'beam');
-    await until(() => plotState(plot).filledSlots === 1);
+    await dropAt(a, d.x, d.z, handNeed(plot)!);
+    await until(() => filledOf(plot) === 1);
     expect((await a.waitFor('snap')).via).toBe('hand');
     expect(sys().machines.usage.groundworkDone).toBe(1);
     void machineId;

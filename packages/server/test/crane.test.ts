@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, it } from 'vitest';
-import { SITE, hookPos, inYard, openSlotRefs } from '@hht/shared';
+import { SITE, hookPos, inYard, needsOf, openSlotRefs, openSlots } from '@hht/shared';
 import type { RunningServer } from '../src/server.ts';
 import { boot, joinPlayer, sleep, until, worldOf, type Player } from './helpers.ts';
 import { machineHelpersFor } from './machine-helpers.ts';
 
 let server: RunningServer;
 const M = machineHelpersFor(() => server);
-const { S, put, host, enter, steps, press, hold, rec, sys, plotState, dropAt } = M;
+const { S, put, host, enter, steps, press, hold, rec, sys, plotState, dropAt, progressOf, filledOf, deliverRecipe } = M;
 afterEach(async () => {
   await server?.close();
 });
@@ -35,14 +35,16 @@ describe('crane and high slots (US3)', () => {
     const plot = await host(a);
     await toStage(a, plot, 3);
     const d = SITE.plots[plot]!;
-    for (let i = 1; i <= 3; i++) {
-      await dropAt(a, d.x, d.z, 'panel');
-      await until(() => plotState(plot).filledSlots === i);
-    }
+    // every hand slot of the Roof recipe (feature 004: 1 panel + 2 beams); only the 3 high panel slots remain
+    const handSlots = openSlots(progressOf(plot)).hand;
+    expect(await deliverRecipe(a, plot)).toHaveLength(handSlots);
+    expect(openSlots(progressOf(plot))).toEqual({ hand: 0, high: 3 });
+    expect(needsOf(progressOf(plot)).filter((n) => !n.done)).toEqual([expect.objectContaining({ type: 'panel', craneOnly: true })]);
     for (const id of [...sys().pieces.keys()]) sys().pieces.delete(id);
     await dropAt(a, d.x, d.z, 'panel');
     expect(await a.waitFor('hint', (h) => h.kind === 'tooHigh')).toEqual({ kind: 'tooHigh' });
-    expect(plotState(plot)).toMatchObject({ filledSlots: 3, highFilled: 0 });
+    expect(filledOf(plot)).toBe(handSlots);
+    expect(plotState(plot)).toMatchObject({ highFilled: 0 });
     const pc = [...sys().pieces.values()][0]!;
     const dist = Math.hypot(pc.x - d.x, pc.z - d.z);
     expect(dist).toBeGreaterThan(d.towerHalf);
@@ -86,13 +88,13 @@ describe('crane and high slots (US3)', () => {
     await lift('panel', { x: high.x + 1.2, z: high.z });
     const snap = await o.waitFor('snap', (e) => e.via === 'crane');
     expect(snap).toMatchObject({ plot, result: 'snapped', via: 'crane', pieceType: 'panel' });
-    expect(plotState(plot)).toMatchObject({ filledSlots: 1, highFilled: 1 });
+    expect(plotState(plot)).toMatchObject({ filledA: 1, filledB: 0, highFilled: 1 });
     expect(sys().pieces.size).toBe(0);
     // a hand slot through the crane
     await exitCrane();
-    const hand = openSlotRefs(def, spots, sys().plots[plot]!.progress).find((s) => !s.high)!;
+    const hand = openSlotRefs(def, spots, sys().plots[plot]!.progress).find((s) => !s.high && s.type === 'panel')!;
     await lift('panel', hand);
-    await until(() => plotState(plot).filledSlots === 2);
+    await until(() => plotState(plot).filledA === 2);
     expect(plotState(plot).highFilled).toBe(1);
     // far from any slot: set down, loose again
     await exitCrane();
@@ -102,12 +104,12 @@ describe('crane and high slots (US3)', () => {
     const down = [...sys().pieces.values()][0]!;
     expect(down.state).toBe('loose');
     expect(Math.hypot(down.x - far.x, down.z - far.z)).toBeLessThanOrEqual(2.01);
-    expect(plotState(plot).filledSlots).toBe(2);
+    expect(filledOf(plot)).toBe(2);
     // the wrong type over a high slot: set down
     await exitCrane();
     await lift('paint', high);
     await until(() => sys().pieces.size === 1 && [...sys().pieces.values()][0]!.type === 'paint');
-    expect(plotState(plot).filledSlots).toBe(2);
+    expect(plotState(plot)).toMatchObject({ filledA: 2, filledB: 0 });
     expect(sys().machines.audit.heldPiecesLost).toBe(0);
     await a.leave();
     await o.leave();
@@ -133,6 +135,9 @@ describe('crane and high slots (US3)', () => {
     const plot = await host(a);
     a.send('crew', { op: 'mode', mode: 'solo' });
     await toStage(a, plot, 6);
+    // feature 004: the Masterpiece also needs one decor by hand; the bell (crane-only) finishes it
+    expect(await deliverRecipe(a, plot)).toEqual(['decor']);
+    expect(needsOf(progressOf(plot)).filter((n) => !n.done)).toEqual([expect.objectContaining({ type: 'bell', craneOnly: true })]);
     const pad = SITE.machines[plot]!.hookPad;
     for (const id of [...sys().pieces.keys()]) sys().pieces.delete(id);
     await dropOn(a, pad.x, pad.z, 'bell');

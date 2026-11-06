@@ -13,7 +13,7 @@ it('keeps stage eligibility, capacity and completed-work bounds', () => {
  const p = { ...initialProgress(), groundDug: 6, groundPoured: 4 };
  expect(forkliftLoadCount(p, 'beam', 0)).toBe(4);
  expect(forkliftLoadCount(p, 'cement', 0)).toBe(0);
- expect(forkliftLoadCount({ ...p, filledSlots: 5 }, 'beam', 0)).toBe(1);
+ expect(forkliftLoadCount({ ...p, filled: [3, 0] }, 'beam', 0)).toBe(1);
  expect(forkliftLoadCount({ ...p, completedStages: 6 }, 'bell', 0)).toBe(0);
  expect(forkliftLoadCount(p, 'cone', 0)).toBe(0);
 });

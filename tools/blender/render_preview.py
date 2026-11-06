@@ -3,6 +3,8 @@
     blender --background --factory-startup --python tools/blender/render_preview.py -- site assets/renders/site-overview.png
     blender --background --factory-startup --python tools/blender/render_preview.py -- machines assets/renders
       (feature 003: machine-crane/-excavator/-forklift/-mixer.png and machines-plot.png)
+    blender --background --factory-startup --python tools/blender/render_preview.py -- tower-stages assets/renders/clock-tower-stages-004.png
+      (feature 004: stages 1–6 side by side, with the second-material details)
 """
 import math
 import os
@@ -13,10 +15,21 @@ from mathutils import Vector
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
-from builders import foreman, machines, site  # noqa: E402
+from builders import clock_tower, foreman, machines, site  # noqa: E402
 from builders.common import reset_scene  # noqa: E402
 
-BUILDERS = {'site': (site.build, (0, -62, 58), (0, -3, 0), 38), 'foreman': (foreman.build, (1.6, -3.6, 1.5), (0, 0, 0.75), 50)}
+def _tower_stages():
+    """Stages 1..6 in a row (2.6 m apart), front (-Y) to the camera."""
+    for st in range(1, 7):
+        root = clock_tower.build(st)
+        root.location.x = (st - 3.5) * 2.6
+
+
+BUILDERS = {
+    'site': (site.build, (0, -62, 58), (0, -3, 0), 38),
+    'foreman': (foreman.build, (1.6, -3.6, 1.5), (0, 0, 0.75), 50),
+    'tower-stages': (_tower_stages, (0, -19.5, 6.0), (0, 0, 2.9), 30),
+}
 
 
 def main():

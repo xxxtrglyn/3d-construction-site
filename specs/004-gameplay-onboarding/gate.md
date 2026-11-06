@@ -62,6 +62,30 @@ Owner acceptance: see [003 gate](../003-construction-machines/gate.md#entry-into
 - Final `pnpm loadtest --duration 300`: PASS, 100/100 bots, 20 ticks/s, average tick 9.68 ms, p99 16.51 ms, average 15,073.6 B/s per client, peak heap 53.02 MB, all nine consistency counters zero. Coverage: 6 early cement loads, 12 cement bags delivered before excavation completed, 10 groundwork completions, 15 crane snaps, 14 pallet unload intents. Authoritative report: `reports/loadtest/2026-11-06T14-52-40-815Z.json`; log: `reports/004-gameplay-onboarding/load-full-final.log`. Existing thresholds were unchanged.
 - Final client/server typechecks and `git diff --check` pass. No dependencies, asset budgets, building quantities, movement rules, or site distances changed. No extension hook file is configured.
 
+## Merge with mixed-material stages (2026-11-07)
+
+`origin/develop` (004 mixed-material stages, protocol v3 / schema v3) was merged into the onboarding work.
+- One forklift loading rule: `forkliftLoadCount()` now covers cement during all of Groundwork (early
+  preparation while digging) and each stage material's remaining need (it replaced `palletSize()`).
+  Server, solo, prompts and load-test bots all use it.
+- `selectGuidance()` is mixed-material aware: any still-needed material counts as "right", the forklift
+  is sent to the material that fills the biggest pallet, and blueprint values replace `CLOCK_TOWER`.
+- Machine help keeps onboarding's success-based card and adds back 003's always-on control bar (Q camera in
+  every machine). Needs refusals use `needsText.hintLine()`; other refusals use `recoveryText()`.
+- The guidance panel moved below the multiplayer crew-needs bar (top 104 px; 112 px on narrow screens).
+- Node v24.18.0: `pnpm typecheck` passes; `pnpm test` passes (shared 136, client 42, server 94);
+  `pnpm build` and `pnpm check:budgets` pass (critical: solo 2272 KB, net 1046 KB).
+- `pnpm e2e` (Chromium + Firefox): 59/60 passed. `mp-recipes` "supply bin" was flaky under full-suite
+  load (a single drop press missed); it passed 3/3 in isolation and was made robust by retrying the press.
+  All 3 recipes tests then passed in one run.
+- `pnpm perf` (Chromium, software renderer): 6/6 passed (reference, crowd and machines scenes, high and low tiers).
+- `pnpm loadtest --duration 60` (100 bots; machine load average ≈ 5.7 at start): PASS. 20 ticks/s, tick avg
+  6.25 ms, p99 17.11 ms, 14.7 KB/s in, heap peak 42.7 MB, every consistency counter 0. Early cement:
+  `earlyCementLoads` 7, `earlyCementDelivered` 4 (both ≥ 1). Report:
+  `reports/loadtest/2026-11-06T18-10-16-932Z.json`. A 60 s run is too short for Groundwork to finish
+  (`groundworkDone` 0, `craneSnaps` / `forkliftSnaps` 0), so the full-length local run is still owed.
+- No human, device or owner items changed; T002, T003 (full baseline), T023, T034, T035 and T036 stay open.
+
 ## Remaining acceptance
 
 T002 baseline remains deferred; T003 has only the pre-change unit/integration baseline, not a retrospective full baseline. T023's human interaction review, T034 physical-device/4G/gamepad checks, T035 newcomer/crew/solo playtests, and T036 owner art review remain unchecked. See [baseline.md](baseline.md) and [playtest.md](playtest.md). Headless browser and viewport results do not establish these observations.

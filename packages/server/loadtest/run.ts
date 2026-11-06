@@ -9,7 +9,7 @@ import { execSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { Worker } from 'node:worker_threads';
-import { CLOCK_TOWER } from '@hht/shared';
+import { SITE, blueprintById, isBlueprintId, machineId } from '@hht/shared';
 import { loadConfig } from '../src/config.ts';
 import { startServer, type RunningServer } from '../src/server.ts';
 import type { BotStats } from './bot.ts';
@@ -29,6 +29,7 @@ const selftest = arg('selftest') === 'true';
 const mode = soak ? 'soak' : duration <= 90 ? 'quick' : 'full';
 const WORKERS = 4;
 const WARMUP_S = Math.min(20, Math.max(5, duration * 0.1));
+const STALL_S = 120;
 const budgets = JSON.parse(readFileSync(resolve(ROOT, 'tools/assets/budgets.json'), 'utf8')).net as Record<string, number>;
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
@@ -76,6 +77,9 @@ async function main(): Promise<void> {
   let lastBytes = new Map<number, number>();
   const t0 = Date.now();
   let peakHeap = 0;
+  // feature 004: last progress change per plot, and the plots seen stalled
+  const lastProgress = new Map<number, { key: string; at: number }>();
+  const stalled = new Set<number>();
   const startHeap = process.memoryUsage().heapUsed / 1048576;
   for (let s = 1; s <= duration; s++) {
     await sleep(1000);
@@ -95,6 +99,26 @@ async function main(): Promise<void> {
       forceGc();
       if (s >= RETAINED_FROM_S) retained.push([now / 60, process.memoryUsage().heapUsed / 1048576]);
     }
+    // feature 004 (research R12): a crewed tower whose progress does not move for 120 s is stalled
+    const ws = server?.ctx.worlds.get(1);
+    if (ws && now > WARMUP_S) {
+      Array.from(ws.state.plots).forEach((p, i) => {
+        const key = `${p.state}:${p.completedStages}:${p.filledA}:${p.filledB}:${p.highFilled}:${p.groundDug}:${p.groundPoured}`;
+        const prev = lastProgress.get(i);
+        if (!prev || prev.key !== key) lastProgress.set(i, { key, at: now });
+        else if (p.state === 'building' && p.crewSize > 0 && now - prev.at > STALL_S && !stalled.has(i)) {
+          stalled.add(i);
+          const sp = SITE.machines[i]!;
+          const near = (x: number, z: number, r: number) => [...ws.systems.pieces.values()].filter((q) => Math.hypot(q.x - x, q.z - z) <= r).map((q) => `${q.type}/${q.state}`);
+          const d = SITE.plots[i]!;
+          const crane = ws.systems.machines.recs[machineId(i, 'crane')];
+          const fork = ws.systems.machines.recs[machineId(i, 'forklift')];
+          console.log(`[loadtest] stalled plot ${i} since t=${prev.at.toFixed(0)}s: state:stage:A:B:high:dug:poured = ${key}, crew ${p.crewSize}`);
+          console.log(`    pad: ${near(sp.hookPad.x, sp.hookPad.z, 3.2).join(' ') || '-'} | zone±3: ${near(d.x, d.z, d.buildZoneRadius + 3).join(' ') || '-'} | bin: ${Array.from(p.bin).join(',') || '-'}`);
+          console.log(`    crane op=${crane?.operator || '-'} phase=${crane?.state.phase} load=${JSON.stringify(crane?.state.load)} | fork op=${fork?.operator || '-'} load=${JSON.stringify(fork?.state.load)}`);
+        }
+      });
+    }
     if (s % 30 === 0 || s === duration) {
       const w1 = server?.ctx.worlds.get(1);
       console.log(`[loadtest] t=${s}s bots=${all.filter((b) => b.connected).length} players=${w1?.sessions.size ?? '?'} tick p99=${w1 ? w1.metricsRef.tickMs.stats().p99.toFixed(2) : '?'}ms heap=${mem.toFixed(0)}MB`);
@@ -105,7 +129,7 @@ async function main(): Promise<void> {
   const viewsP = new Promise<unknown[]>((r) => (viewsResolve = r));
   await sleep(1500);
   for (const w of workers) w.postMessage({ type: 'views' });
-  const views = (await Promise.race([viewsP, sleep(5000).then(() => viewsCollected)])) as Array<Array<{ completedStages: number; filledSlots: number; crewSize: number; state: string }>>;
+  const views = (await Promise.race([viewsP, sleep(5000).then(() => viewsCollected)])) as Array<Array<{ completedStages: number; filledA: number; filledB: number; crewSize: number; state: string }>>;
 
   const all = latest.flat();
   const world = server?.ctx.worlds.get(1);
@@ -118,14 +142,16 @@ async function main(): Promise<void> {
   const ticksPerS = tickRates.length ? tickRates.reduce((s, x) => s + x, 0) / tickRates.length : 20;
   let divergent = 0;
   if (world) {
-    const truth = Array.from(world.state.plots, (p) => ({ completedStages: p.completedStages, filledSlots: p.filledSlots, crewSize: p.crewSize, state: p.state }));
+    const truth = Array.from(world.state.plots, (p) => ({ completedStages: p.completedStages, filledA: p.filledA, filledB: p.filledB, crewSize: p.crewSize, state: p.state }));
     for (const v of views) if (JSON.stringify(v) !== JSON.stringify(truth)) divergent++;
   }
   let overfilled = 0;
   if (world) {
     for (const p of world.state.plots) {
-      const st = CLOCK_TOWER.stages[p.completedStages];
-      if (p.completedStages > 6 || (st && p.filledSlots >= st.slotCount)) overfilled++;
+      // per material (feature 004): no recipe item over its count, and never a full stage left open
+      const st = isBlueprintId(p.blueprintId) ? blueprintById(p.blueprintId).stages[p.completedStages] : undefined;
+      const ab = [p.filledA, p.filledB];
+      if (p.completedStages > 6 || (st && (st.recipe.some((r, i) => (ab[i] ?? 0) > r.count) || st.recipe.every((r, i) => (ab[i] ?? 0) >= r.count)))) overfilled++;
     }
   }
   // feature 003: hooked and pallet pieces are deliberately not in the schema (research M10)
@@ -142,6 +168,8 @@ async function main(): Promise<void> {
     machineOutsiderOps: (mAudit?.machineOutsiderOps ?? 0) + all.reduce((s, b) => s + (b.machineOutsiderOps ?? 0), 0),
     highFilledByHand: mAudit?.highFilledByHand ?? 0,
     workerMovedByMachine: mAudit?.workerMovedByMachine ?? 0,
+    // feature 004: crewed towers stuck for 120 s (must be 0, SC-005)
+    stalledTowers: stalled.size,
     heldPiecesLost: mAudit?.heldPiecesLost ?? 0,
   };
   const behaviors: Record<string, number> = {};
