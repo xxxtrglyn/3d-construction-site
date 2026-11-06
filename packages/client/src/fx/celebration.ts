@@ -1,3 +1,4 @@
+import { reducedMotion } from '../game/gameplayFeedback.ts';
 import * as THREE from 'three';
 import { PALETTE } from '../render/palette.gen.ts';
 
@@ -53,6 +54,7 @@ export class Celebration {
   }
 
   start(center: THREE.Vector3, seconds = 7): void {
+    if (reducedMotion()) return;
     this.center.copy(center);
     this.active = seconds;
     this.nextBurst = 0;

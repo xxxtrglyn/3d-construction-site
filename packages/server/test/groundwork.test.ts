@@ -118,7 +118,8 @@ describe('Groundwork (US2)', () => {
     const t0 = Date.now();
     await steps(a, press(6));
     await until(() => plotState(plot).mixerMixUntil > 0);
-    await a.waitFor('machineAct', (e) => e.act === 'mixDone', 8000);
+    expect((await a.waitFor('machineAct', (e) => e.act === 'mixStart')).by).toBe(a.welcome.sessionId);
+    expect((await a.waitFor('machineAct', (e) => e.act === 'mixDone', 8000)).by).toBeNull();
     expect(Date.now() - t0).toBeGreaterThanOrEqual(MACHINE.mixer.mixS * 1000 - 200);
     expect(plotState(plot).mixerBags).toBe(0);
     expect(row(plot).mixer_bags).toBe(0);

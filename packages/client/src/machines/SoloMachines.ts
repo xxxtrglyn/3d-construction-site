@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import {
+  forkliftLoadCount, forkliftUnloadLabel,
   CLOCK_TOWER, MACHINE, MACHINE_KINDS, SIM_DT, atPit, atSpoil, exitSpot, groundworkPart, hookPos, machineBusy, machineCtx, machineId,
-  neededSupply, openSlotRefs, openSlots, parkedState, rackAtForks, seatPose, setDownSpot, snapTarget, stepMachine, toolTip,
+  openSlotRefs, parkedState, rackAtForks, seatPose, setDownSpot, snapTarget, stepMachine, toolTip,
   type MachineAction, type MachineCtx, type MachineKind, type MachineState, type MoveInput, type ObstacleBox, type PieceTypeId,
   type SiteLayout, type SlotRef,
 } from '@hht/shared';
@@ -9,6 +10,7 @@ import type { Piece, PieceManager } from '../game/pieceManager.ts';
 import type { TowerPlot } from '../game/towerPlot.ts';
 
 export interface SoloMachineEvents {
+  snap?(): void;
   act(kind: MachineKind, act: 'scoop' | 'dump' | 'dumpBack' | 'hookGrab' | 'hookRelease' | 'palletLoad' | 'palletUnload' | 'mixStart' | 'mixDone' | 'bagIn' | 'mixerFull'): void;
 }
 
@@ -206,7 +208,10 @@ export class SoloMachines {
     this.events.act('crane', 'hookRelease');
     if (slot) {
       if (slot.type === 'concrete') this.plot.pourConcrete(null);
-      else this.plot.deliverPiece(type, null, 'crane', { high: slot.high });
+      else {
+        const result = this.plot.deliverPiece(type, null, 'crane', { high: slot.high });
+        if (result === 'snapped' || result === 'stageComplete' || result === 'masterpiece') this.events.snap?.();
+      }
       return;
     }
     const h = hookPos(s, this.spots);
@@ -224,11 +229,7 @@ export class SoloMachines {
     const rack = this.site.racks[rackAtForks(s, this.site)];
     if (!rack) return;
     const pr = this.plot.progress;
-    if (neededSupply(pr) !== rack.type || rack.type === 'concrete' || rack.type === 'cone') return;
-    const open = openSlots(pr);
-    const n = rack.type === 'cement'
-      ? Math.min(MACHINE.forklift.palletMax, Math.max(0, CLOCK_TOWER.groundwork.concrete - pr.groundPoured - this.mixerBags))
-      : Math.min(MACHINE.forklift.palletMax, open.hand > 0 ? open.hand : open.high);
+    const n = forkliftLoadCount(pr, rack.type, this.mixerBags);
     if (n <= 0) return;
     this.setLoad(i, { kind: 'pallet', pieces: Array.from({ length: n }, () => rack.type) });
     this.events.act('forklift', 'palletLoad');
@@ -328,11 +329,11 @@ export class SoloMachines {
         if (groundworkPart(pr) !== 'dig') return { text: 'The pit is dug', disabled: true };
         return atPit(s, spots) ? { text: 'Scoop', disabled: false } : { text: 'Move closer to the pit', disabled: true };
       case 'forklift': {
-        if (s.load.kind === 'pallet') return { text: `Unload ${s.load.pieces.length}`, disabled: false };
+        if (s.load.kind === 'pallet') return { text: forkliftUnloadLabel(s, this.site, 0, pr, this.mixerBags, this.mixerMixUntil > 0), disabled: false };
         const rack = this.site.racks[rackAtForks(s, this.site)];
         if (!rack) return { text: 'Drive to a rack', disabled: true };
-        if (neededSupply(pr) !== rack.type) return { text: 'Not needed', disabled: true };
-        return { text: `Load ${rack.type}`, disabled: false };
+        const n = forkliftLoadCount(pr, rack.type, this.mixerBags);
+        return n > 0 ? { text: `Load ${n} ${rack.type}`, disabled: false } : { text: 'Nothing needed here', disabled: true };
       }
       case 'crane':
         if (s.phase !== 'idle') return { text: s.phase === 'lowering' ? 'Lowering…' : 'Raising…', disabled: true };

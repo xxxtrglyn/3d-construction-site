@@ -1,3 +1,4 @@
+import { reducedMotion } from '../game/gameplayFeedback.ts';
 import * as THREE from 'three';
 import { toonMaterial } from '../render/toonMaterial.ts';
 
@@ -30,12 +31,15 @@ export class Puffs {
   }
 
   emit(at: THREE.Vector3, count = 8, spread = 0.6, size = 0.45): void {
+    if (reducedMotion()) return;
     for (let i = 0; i < count && this.parts.length < CAP; i++) {
       const a = Math.random() * Math.PI * 2;
       const v = new THREE.Vector3(Math.cos(a) * spread * (0.6 + Math.random()), 0.6 + Math.random() * 0.8, Math.sin(a) * spread * (0.6 + Math.random()));
       this.parts.push({ pos: at.clone().addScaledVector(v, 0.2), vel: v.multiplyScalar(2), life: 0, max: 0.5 + Math.random() * 0.35, size: size * (0.7 + Math.random() * 0.6) });
     }
   }
+
+  clear(): void { this.parts.length = 0; this.mesh.count = 0; this.mesh.visible = false; }
 
   update(dt: number): void {
     let n = 0;

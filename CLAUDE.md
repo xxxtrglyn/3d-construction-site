@@ -4,7 +4,11 @@ A browser-based 3D chibi construction-site sandbox: about 100 players per world 
 and players join from a link.
 
 - **Constitution (binding)**: `.specify/memory/constitution.md`
-- **Active feature**: `specs/003-construction-machines/` (operable crane, excavator, forklift and
+- **Active feature**: `specs/004-gameplay-onboarding/` (contextual guidance, success-based machine help,
+  confirmed feedback, and early forklift cement preparation; all three user stories implemented,
+  automated validation passed; human/device/owner acceptance pending). Owner accepted the outstanding 003 gate risks and deferred the 004 human
+  baseline on 2026-11-05.
+- **Construction machines**: `specs/003-construction-machines/` (operable crane, excavator, forklift and
   mixer per plot and in solo; Groundwork and crane-only high slots; protocol v2: spec, plan,
   research M1–M16, data model, contracts). Feature 002 (`specs/002-multiplayer-core/`, multiplayer
   world with Host crews) is implemented; its gate has owner/device/playtest items open. Feature 001
@@ -71,3 +75,16 @@ owner, device and playtest items open). Music and machine sounds: `tools/audio/g
   the only free-text input and must follow the moderation baseline in constitution v1.1.0
   (Principle V).
 - Only original assets are allowed; never copy other games' content.
+
+## Gameplay guidance (004)
+
+- `shared/guidance.ts` selects advisory next actions; it never grants crew access or changes progress.
+- `shared/machines.ts:forkliftLoadCount()` is the single loading quantity rule for server, solo,
+  and prompt prediction. Cement may be prepared during digging; `pour()` still requires excavation.
+- `client/ui/gameplayGuide.ts` renders the common optional guidance panel and target; existing
+  machine cues and high-slot previews are reused. Help follows the active input device.
+- Local `completedMachineHints` records confirmed productive work; legacy `seenMachineHints` does
+  not establish learning. `machineAct.by` is server-authored; missing/null attribution never teaches
+  a machine. Delayed `mixDone` is unattributed; crane learning uses attributed `snap` via crane.
+- Load reports include authoritative `earlyCementLoads` and `earlyCementDelivered`; full local runs
+  require both ≥1 in addition to the prior machine coverage. No binary protocol or database migration.

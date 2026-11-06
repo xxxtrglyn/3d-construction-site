@@ -36,6 +36,7 @@ interface PlotView {
   mixerMixUntil: number;
   machineOps: ArrayLike<string>;
   hookType: string;
+  palletTypes: ArrayLike<string>;
 }
 
 type Mode = 'idle' | 'toForeman' | 'toSign' | 'fetch' | 'deliver' | 'donate' | 'wander' | 'toMachine' | 'pickUp';
@@ -513,6 +514,7 @@ export class Bot {
     const spots = SITE.machines[plot]!;
     if (part === 'dig') {
       if (!this.opOf(p, 'excavator')) return this.startJob(plot, 'excavator');
+      if (!this.opOf(p, 'forklift') && p.mixerBags < CLOCK_TOWER.groundwork.concrete) return this.startJob(plot, 'forklift');
       this.target = { x: spots.hookPad.x, z: spots.hookPad.z }; // wait near the plot
       return true;
     }
@@ -574,6 +576,12 @@ export class Bot {
     switch (s.kind) {
       case 'excavator': {
         if (groundworkPart(progress) !== 'dig' && s.load.kind !== 'dirt') return quit();
+        // Coordinate the preparation scenario through normal inputs: leave the final
+        // scoop until the active forklift returns, with a bounded wait if it gets stuck.
+        if (progress.groundDug === CLOCK_TOWER.groundwork.scoops - 1 && p.mixerBags === 0 && this.opOf(p, 'forklift') && now - job.startedAt < 65_000) {
+          this.axes = { dx: 0, dz: 0 };
+          return;
+        }
         const ready = excavatorReady(s, plot);
         if (s.load.kind === 'dirt') {
           const m = tankTo(s, spots.spoil.x, spots.spoil.z, 2.3);
@@ -622,8 +630,8 @@ export class Bot {
     }
   }
 
-  private driveForklift(s: ReturnType<typeof toState>, plot: number, _p: PlotView, progress: TowerProgress, job: MachineJob, now: number, act: (n: string) => void, quit: () => void): void {
-    const need = neededSupply(progress);
+  private driveForklift(s: ReturnType<typeof toState>, plot: number, p: PlotView, progress: TowerProgress, job: MachineJob, now: number, act: (n: string) => void, quit: () => void): void {
+    const need = groundworkPart(progress) === 'dig' ? 'cement' : neededSupply(progress);
     if (process.env.HHT_DEBUG_FORK && now % 2000 < 260) console.log(`[fork ${this.id}] plot=${plot} step=${job.step} load=${s.load.kind} need=${need} pos=${s.x.toFixed(1)},${s.z.toFixed(1)} v=${s.p3.toFixed(2)} t=${((now - job.startedAt) / 1000).toFixed(0)}`);
     const loaded = s.load.kind === 'pallet';
     const def = SITE.plots[plot]!;
@@ -663,7 +671,8 @@ export class Bot {
     }
     if (job.step < 100) job.step = 100;
     const spots = SITE.machines[plot]!;
-    const dest = need === 'cement' ? spots.mixer.hopper : { x: def.x, z: def.z };
+    const cement = p.palletTypes[0] === 'cement';
+    const dest = cement ? spots.mixer.hopper : { x: def.x, z: def.z };
     const route = forkliftReturn(plot, job.yard ?? 0, dest);
     const i = job.step - 100;
     if (i < route.length - 1) {
@@ -676,9 +685,9 @@ export class Bot {
     const tip = toolTip(s);
     const inZone = Math.hypot(tip.x - def.x, tip.z - def.z) <= def.buildZoneRadius - 0.4;
     const atHopper = Math.hypot(tip.x - spots.mixer.hopper.x, tip.z - spots.mixer.hopper.z) <= spots.mixer.hopperRadius + MACHINE.forklift.rackReach;
-    const m = carTo(s, dest.x, dest.z, need === 'cement' ? 0.8 : 1.2);
+    const m = carTo(s, dest.x, dest.z, cement ? 0.8 : 1.2);
     this.axes = { dx: m.dx, dz: m.dz };
-    if (inZone || atHopper || m.there || now - job.startedAt > 90_000) {
+    if (cement ? atHopper : inZone) {
       this.axes = { dx: 0, dz: 0 };
       act('palletUnload');
     }

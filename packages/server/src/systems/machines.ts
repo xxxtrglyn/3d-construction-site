@@ -1,7 +1,8 @@
 import {
+  forkliftLoadCount,
   CLOCK_TOWER, MACHINE, MACHINES_PER_PLOT, MACHINE_KINDS, NET, SIM_DT, SITE,
   atSpoil, canEnter, dig, distToSquare, exitSpot, groundworkPart, hookPos, initialWorker, kindIndex, kindOfMachine, machineBusy,
-  machineCtx, neededSupply, openSlotRefs, openSlots, parkedState, plotOfMachine, pour, rackAtForks, seatPose, setDownSpot, snapTarget,
+  machineCtx, openSlotRefs, parkedState, plotOfMachine, pour, rackAtForks, seatPose, setDownSpot, snapTarget,
   stepMachine, toolTip,
   type MachineAction, type MachineActKind, type MachineCtx, type MachineExitReason, type MachineId, type MachineState, type MoveInput,
   type PieceTypeId,
@@ -27,7 +28,7 @@ export class MachineSystem {
   /** independent invariant checks read by the load test (must stay 0) */
   readonly audit = { machineOutsiderOps: 0, highFilledByHand: 0, workerMovedByMachine: 0, heldPiecesLost: 0 };
   /** usage counters for the load-test report */
-  readonly usage = { groundworkDone: 0, craneSnaps: 0, forkliftSnaps: 0, maxMachinesMoving: 0 };
+  readonly usage = { earlyCementLoads: 0, earlyCementDelivered: 0, groundworkDone: 0, craneSnaps: 0, forkliftSnaps: 0, maxMachinesMoving: 0 };
   private readonly w: WorldSystems;
   private stepNo = 0;
   private readonly outsiderSince = new Map<MachineId, number>();
@@ -267,7 +268,7 @@ export class MachineSystem {
     for (const o of this.room.sessions.values()) {
       const dx = o.worker.x - r.state.x;
       const dz = o.worker.z - r.state.z;
-      if (dx * dx + dz * dz <= R2) this.room.sendTo(o, 'machineAct', { id: r.state.id, act, plot });
+      if (dx * dx + dz * dz <= R2) this.room.sendTo(o, 'machineAct', { id: r.state.id, act, plot, by: act === 'mixDone' ? null : r.operator || null });
     }
   }
 
@@ -366,10 +367,7 @@ export class MachineSystem {
   private palletCount(plot: number, type: PieceTypeId): number {
     const b = this.w.plots[plot];
     if (!b || b.state !== 'building' || type === 'concrete' || type === 'cone') return 0;
-    if (neededSupply(b.progress) !== type) return 0;
-    if (type === 'cement') return Math.min(MACHINE.forklift.palletMax, Math.max(0, CLOCK_TOWER.groundwork.concrete - b.progress.groundPoured - b.mixerBags));
-    const open = openSlots(b.progress);
-    return Math.min(MACHINE.forklift.palletMax, open.hand > 0 ? open.hand : open.high);
+    return forkliftLoadCount(b.progress, type, b.mixerBags);
   }
 
   private loadPallet(r: MachineRec): void {
@@ -385,6 +383,7 @@ export class MachineSystem {
       pieces.push(rack.type);
     }
     this.setLoad(r, { kind: 'pallet', pieces });
+    if (rack.type === 'cement' && this.w.plots[plot] && groundworkPart(this.w.plots[plot]!.progress) === 'dig') this.usage.earlyCementLoads++;
     this.act(r, 'palletLoad');
   }
 
@@ -418,6 +417,7 @@ export class MachineSystem {
       }
       if (b && atHopper && p.type === 'cement' && b.mixerBags < MACHINE.mixer.capacity && b.mixerMixUntil === 0) {
         this.w.consumeHeld(p.id);
+        if (groundworkPart(b.progress) === 'dig') this.usage.earlyCementDelivered++;
         this.w.addMixerBag(b);
         continue;
       }

@@ -18,3 +18,4 @@ export * from './bin.ts';
 export * from './shift.ts';
 export * from './chat.ts';
 export * from './machines.ts';
+export * from './guidance.ts';

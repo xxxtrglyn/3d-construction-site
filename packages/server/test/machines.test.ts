@@ -234,3 +234,25 @@ describe('fair machines (US5)', () => {
   });
 
 });
+
+it('attributes immediate mix start to its actor and never credits a later seat occupant for mixDone', async () => {
+  server = await boot();
+  const a = await joinPlayer(server), b = await joinPlayer(server);
+  const plot = await host(a, { groundwork: true });
+  a.send('crew', { op: 'mode', mode: 'open' });
+  await until(() => plotState(plot).joinMode === 'open');
+  b.send('crew', { op: 'request', plot });
+  await b.waitFor('requestResult', r => r.result === 'joined');
+  sys().plots[plot]!.mixerBags = 1;
+  sys().machines.syncMixerLoad(plot);
+  sys().syncPlot(plot);
+  expect(await enter(a, plot, 'mixer')).toBe('entered');
+  await steps(a, press(6));
+  const started = await a.waitFor('machineAct', e => e.act === 'mixStart');
+  a.send('machine', { op: 'exit' });
+  await until(() => S(a).machine === -1);
+  expect(await enter(b, plot, 'mixer')).toBe('entered');
+  expect(started.by).toBe(a.welcome.sessionId);
+  expect((await b.waitFor('machineAct', e => e.act === 'mixDone', 8000)).by).toBeNull();
+  await a.leave(); await b.leave();
+}, 15_000);

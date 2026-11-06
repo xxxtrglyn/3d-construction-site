@@ -32,7 +32,7 @@
 .net-prompt.hidden { display: none; }
 .net-prompt.disabled { opacity: .62; background: rgba(235, 232, 226, .95); }
 .net-prompt .sub { font-weight: 700; opacity: .7; margin-left: 6px; }
-.machine-hint { position: fixed; left: 50%; top: max(70px, calc(env(safe-area-inset-top) + 64px)); transform: translateX(-50%); max-width: min(92vw, 420px); padding: 10px 16px; border-radius: 16px; background: rgba(255, 247, 230, .97); border: 3px solid #2a1a1a; font-weight: 700; font-size: 14px; line-height: 1.45; pointer-events: none; text-align: left; }
+.machine-hint { position: fixed; left: 50%; top: max(165px, calc(env(safe-area-inset-top) + 160px)); transform: translateX(-50%); width: min(calc(100vw - 32px), 420px); box-sizing: border-box; padding: 10px 16px; border-radius: 16px; background: rgba(255, 247, 230, .97); border: 3px solid #2a1a1a; font-weight: 700; font-size: 14px; line-height: 1.45; pointer-events: auto; text-align: left; }
 .machine-hint.hidden { display: none; }
 .machine-hint b { font-weight: 900; }
 .machine-hint .title { font-weight: 900; font-size: 16px; margin-bottom: 4px; }

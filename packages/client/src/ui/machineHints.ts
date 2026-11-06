@@ -1,54 +1,57 @@
 import type { MachineKind } from '@hht/shared';
+import type { Actions } from '../input/actions.ts';
 import type { ProfileStore } from '../profile/guestProfile.ts';
-
-const TEXT: Record<MachineKind, { title: string; lines: string[] }> = {
-  excavator: { title: '🚜 Excavator', lines: ['<kbd>W</kbd><kbd>S</kbd> drive · <kbd>A</kbd><kbd>D</kbd> turn', '<kbd>E</kbd> scoop at the pit, then dump on the dirt heap', '<kbd>Space</kbd> get out'] },
-  forklift: { title: '🛻 Forklift', lines: ['<kbd>W</kbd><kbd>S</kbd> drive · <kbd>A</kbd><kbd>D</kbd> steer', '<kbd>E</kbd> load a pallet at a rack, unload at your plot', '<kbd>Space</kbd> get out'] },
-  crane: { title: '🏗️ Tower crane', lines: ['<kbd>A</kbd><kbd>D</kbd> swing · <kbd>W</kbd><kbd>S</kbd> hook out / in', '<kbd>E</kbd> grab or release — the hook goes down and up by itself', '<kbd>Q</kbd> hook camera ↔ cab camera · <kbd>Space</kbd> get out'] },
-  mixer: { title: '🥣 Cement mixer', lines: ['Crew members drop cement bags in the hopper (up to 4)', '<kbd>E</kbd> mix: every bag becomes a concrete bucket', '<kbd>Space</kbd> get out'] },
+import { learnedMachine, type ConfirmedFeedback } from '../game/gameplayFeedback.ts';
+const DESCRIBE: Record<MachineKind, string> = {
+  excavator: 'Scoop at the pit, then carry dirt to the spoil heap and dump.',
+  forklift: 'Load at a supply rack. Drive to your plot or mixer hopper to unload.',
+  crane: 'Swing and move the hook out/in. Grab from the striped pad; release over a lit slot.',
+  mixer: 'Drop cement bags into the hopper, then mix them into concrete buckets.',
 };
-
-/**
- * First-time control hint per machine kind (FR-010): shown for 6 s or until the first input, once per
- * kind per device (profile `seenMachineHints`), and again on request from the "?" menu.
- */
+export function controlLabels(device: Actions['lastDevice']): { move: string; action: string; exit: string; camera: string } {
+  if (device === 'touch') return { move: 'Stick', action: 'Action', exit: 'Get out', camera: 'Camera' };
+  if (device === 'gamepad') return { move: 'Left stick', action: 'X / Square', exit: 'A / Cross', camera: 'B / Circle' };
+  return { move: 'W A S D', action: 'E', exit: 'Space', camera: 'Q' };
+}
+/** Compact help stays until productive success or explicit dismissal. */
 export class MachineHints {
   private readonly el: HTMLDivElement;
-  private until = 0;
+  private readonly text: HTMLDivElement;
+  private device: Actions['lastDevice'] = 'keyboard';
+  private readonly dismissed = new Set<MachineKind>();
   shownKind: MachineKind | null = null;
-
   constructor(root: HTMLElement, private readonly profile: ProfileStore) {
     this.el = document.createElement('div');
     this.el.className = 'machine-hint hidden';
     this.el.dataset.testid = 'machine-hint';
+    this.text = document.createElement('div');
+    const dismiss = document.createElement('button');
+    dismiss.textContent = 'Got it';
+    dismiss.onclick = () => { if (this.shownKind) this.dismissed.add(this.shownKind); this.hide(); };
+    this.el.append(this.text, dismiss);
     root.appendChild(this.el);
   }
-
-  /** On entering: show the card if this device has not seen it yet (or `force`). */
   onEnter(kind: MachineKind, force = false): void {
-    const seen = this.profile.get().seenMachineHints ?? [];
-    if (!force && seen.includes(kind)) return;
-    const t = TEXT[kind];
-    this.el.innerHTML = `<div class="title">${t.title}</div>${t.lines.map((l) => `<div>${l}</div>`).join('')}`;
-    this.el.classList.remove('hidden');
-    this.until = performance.now() + 6000;
+    if (!force && (this.profile.get().guidanceHidden || this.dismissed.has(kind) || this.profile.get().completedMachineHints?.includes(kind))) return;
     this.shownKind = kind;
-    if (!seen.includes(kind)) this.profile.update({ seenMachineHints: [...seen, kind] });
+    this.render();
+    this.el.classList.remove('hidden');
   }
-
-  /** Per frame: hides after 6 s or on the first machine input. */
-  update(input: boolean): void {
+  update(device: Actions['lastDevice']): void {
+    if (device !== this.device) { this.device = device; this.render(); }
+  }
+  confirmed(e: ConfirmedFeedback, me: string): void {
+    const kind = learnedMachine(e, me);
+    if (!kind) return;
+    const completed = this.profile.get().completedMachineHints ?? [];
+    if (!completed.includes(kind)) this.profile.update({ completedMachineHints: [...completed, kind] });
+    if (this.shownKind === kind) this.hide();
+  }
+  private render(): void {
     if (!this.shownKind) return;
-    if (input && performance.now() > this.until - 5400) this.hide();
-    else if (performance.now() > this.until) this.hide();
+    const labels = controlLabels(this.device);
+    this.text.textContent = `${this.shownKind[0]!.toUpperCase()}${this.shownKind.slice(1)} · ${labels.move} move · ${labels.action} action · ${labels.exit} get out${this.shownKind === 'crane' ? ` · ${labels.camera} camera` : ''}. ${DESCRIBE[this.shownKind]}`;
   }
-
-  hide(): void {
-    this.el.classList.add('hidden');
-    this.shownKind = null;
-  }
-
-  get visible(): boolean {
-    return this.shownKind !== null;
-  }
+  hide(): void { this.el.classList.add('hidden'); this.shownKind = null; }
+  get visible(): boolean { return this.shownKind !== null; }
 }

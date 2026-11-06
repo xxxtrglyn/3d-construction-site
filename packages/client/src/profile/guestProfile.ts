@@ -1,4 +1,4 @@
-import { generateName, isHatColorId, isValidGuestName, randomHatColor, type HatColorId, type MachineKind, type Rng } from '@hht/shared';
+import { MACHINE_KINDS, generateName, isHatColorId, isValidGuestName, randomHatColor, type HatColorId, type MachineKind, type Rng } from '@hht/shared';
 
 export const PROFILE_KEY = 'hht.profile.v2';
 export const LEGACY_PROFILE_KEY = 'hht.profile.v1';
@@ -19,6 +19,8 @@ export interface GuestProfile {
   hideAllChat: boolean;
   /** feature 003: machine kinds whose control hint card this device has seen (optional: older profiles lack it) */
   seenMachineHints?: MachineKind[];
+  completedMachineHints?: MachineKind[];
+  guidanceHidden?: boolean;
 }
 
 export interface StorageLike {
@@ -119,6 +121,7 @@ export class ProfileStore {
       readable = false;
     }
     this.profile = loaded ?? newProfile(rng);
+    this.normalizeLearning();
     this.persistent = readable && this.save();
   }
 
@@ -128,6 +131,7 @@ export class ProfileStore {
 
   update(patch: Partial<Omit<GuestProfile, 'version' | 'createdAt' | 'playerKey'>>): Readonly<GuestProfile> {
     this.profile = { ...this.profile, ...patch, hintsDone: { ...this.profile.hintsDone, ...(patch.hintsDone ?? {}) } };
+    this.normalizeLearning();
     this.save();
     return this.profile;
   }
@@ -137,6 +141,12 @@ export class ProfileStore {
     for (let i = 0; i < 5 && name === this.profile.name; i++) name = generateName(rng);
     this.update({ name });
     return name;
+  }
+
+  private normalizeLearning(): void {
+    const raw = this.profile.completedMachineHints;
+    this.profile.completedMachineHints = Array.isArray(raw) ? [...new Set(raw.filter(k => MACHINE_KINDS.includes(k)))] : [];
+    this.profile.guidanceHidden = this.profile.guidanceHidden === true;
   }
 
   private save(): boolean {

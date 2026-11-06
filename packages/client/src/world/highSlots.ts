@@ -1,3 +1,4 @@
+import { reducedMotion } from '../game/gameplayFeedback.ts';
 import * as THREE from 'three';
 import { currentStage, type MachineSpots, type SlotRef, type TowerProgress } from '@hht/shared';
 
@@ -31,7 +32,7 @@ export class HighSlotRings {
 
   /** `plots`: progress per plot with a building (null = none); `lit`: the crane's snap target, if any. */
   update(dt: number, plots: ReadonlyArray<{ progress: TowerProgress | null; spots: MachineSpots }>, lit: SlotRef | null): void {
-    this.t += dt;
+    this.t = reducedMotion() ? 0 : this.t + dt;
     let n = 0;
     for (const { progress, spots } of plots) {
       if (!progress) continue;

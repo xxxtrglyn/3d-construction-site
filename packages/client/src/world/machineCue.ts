@@ -1,3 +1,4 @@
+import { reducedMotion } from '../game/gameplayFeedback.ts';
 import * as THREE from 'three';
 import { neededMachine, type MachineKind, type TowerProgress } from '@hht/shared';
 
@@ -30,9 +31,9 @@ export class MachineCue {
    * `myPlot` / `progress`: the viewer's crew plot; `operated(kind)`: someone is in it; `where(kind)`: the
    * machine's ground position and top height.
    */
-  update(dt: number, myPlot: number, progress: TowerProgress | null, operated: (k: MachineKind) => boolean, where: (k: MachineKind) => { x: number; z: number; top: number }): void {
-    this.t += dt;
-    const kind = myPlot >= 0 && progress ? neededMachine(progress) : null;
+  update(dt: number, myPlot: number, progress: TowerProgress | null, operated: (k: MachineKind) => boolean, where: (k: MachineKind) => { x: number; z: number; top: number }, override?: MachineKind | null): void {
+    this.t = reducedMotion() ? 0 : this.t + dt;
+    const kind = override !== undefined ? override : myPlot >= 0 && progress ? neededMachine(progress) : null;
     const show = kind !== null && !operated(kind);
     this.current = { plot: myPlot, machine: show ? kind : null };
     this.group.visible = show;

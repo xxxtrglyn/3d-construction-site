@@ -215,7 +215,7 @@ export interface ServerEvents {
   // feature 003
   machineResult: { id: MachineId; result: MachineEnterResult };
   machineExit: { id: MachineId; reason: MachineExitReason };
-  machineAct: { id: MachineId; act: MachineActKind; plot: number };
+  machineAct: { by: string | null; id: MachineId; act: MachineActKind; plot: number };
   ground: { plot: number; dug: number; poured: number; done: boolean };
 }
 

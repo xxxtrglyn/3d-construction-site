@@ -26,6 +26,7 @@ export interface HhtDebugApi {
   camera(): 'follow' | 'hook' | 'cab' | 'mixer';
   /** the solo plot's machine spots (tests) */
   machineSpots(): unknown;
+  supplyRacks(): Array<{ x: number; z: number; type: PieceTypeId; yaw: number }>;
   /** loose pieces (tests) */
   loosePieces(): Array<{ type: PieceTypeId; x: number; y: number; z: number; rejected: boolean; fade: number }>;
   debug: {
@@ -80,6 +81,7 @@ export function installDebugApi(game: Game, ready: Promise<void>, params: URLSea
     cue: () => game.cue.current,
     snapRing: () => game.highSlots.litSlot,
     camera: () => (game.machineCams.active ? game.machineCams.mode : 'follow'),
+    supplyRacks: () => game.site.racks.map(r => ({ x: r.x, z: r.z, type: r.type, yaw: r.yaw })),
     machineSpots: () => game.layout.machines,
     loosePieces: () => game.pieces.loose().map((p) => ({ type: p.type, x: p.position.x, y: p.position.y, z: p.position.z, rejected: p.rejected, fade: p.fade })),
     render: () => {

@@ -11,7 +11,7 @@ import { CLOCK_TOWER, type Blueprint } from './blueprints.ts';
 import { MACHINE } from './constants.ts';
 import { STEP_UP, WORKER_RADIUS, pushBox, pushCyl, type MoveInput, type Push } from './kinematics.ts';
 import type { PieceTypeId } from './pieces.ts';
-import { currentStage, groundworkPart, type TowerProgress } from './progression.ts';
+import { currentStage, groundworkPart, neededPiece, openSlots, type TowerProgress } from './progression.ts';
 import { dist2, inPlaza, inSquare, distToSquare, type MachineSpots, type ObstacleBox, type ObstacleCyl, type PlotDef, type SiteLayout } from './site.ts';
 
 // ---------------------------------------------------------------- identity
@@ -700,4 +700,28 @@ export function neededMachine(p: TowerProgress, bp: Blueprint = CLOCK_TOWER): Ma
   const st = currentStage(p, bp);
   if (st && st.highSlots - p.highFilled > 0) return 'crane';
   return null;
+}
+
+/** Per-load cap, not a stock reservation: loose or already mixed material is not counted. */
+export function forkliftLoadCount(p: TowerProgress, type: PieceTypeId, mixerBags: number, bp: Blueprint = CLOCK_TOWER): number {
+  if (p.completedStages >= bp.stages.length) return 0;
+  const part = groundworkPart(p, bp);
+  if (part) return type === 'cement' ? Math.min(MACHINE.forklift.palletMax, Math.max(0, bp.groundwork.concrete - p.groundPoured - mixerBags)) : 0;
+  if (type !== neededPiece(p, bp)) return 0;
+  const open = openSlots(p, bp);
+  return Math.min(MACHINE.forklift.palletMax, Math.max(0, open.hand > 0 ? open.hand : open.high));
+}
+
+/** Uses the same receiving zones and capacities as authoritative unloading. */
+export function forkliftUnloadLabel(s: MachineState, site: SiteLayout, plot: number, p: TowerProgress, bags: number, mixing: boolean): string {
+  if (s.load.kind !== 'pallet') return 'Empty pallet';
+  const tip = toolTip(s), def = site.plots[plot]!, spots = site.machines[plot]!;
+  const n = s.load.pieces.length;
+  const hopper = Math.hypot(tip.x - spots.mixer.hopper.x, tip.z - spots.mixer.hopper.z) <= spots.mixer.hopperRadius + MACHINE.forklift.rackReach + 0.5;
+  const inZone = Math.hypot(tip.x - def.x, tip.z - def.z) <= def.buildZoneRadius;
+  const cement = s.load.pieces.filter(t => t === 'cement').length;
+  const received = cement ? (hopper && !mixing ? Math.min(cement, Math.max(0, MACHINE.mixer.capacity - bags)) : 0)
+    : (inZone && !groundworkPart(p) ? Math.min(openSlots(p).hand, s.load.pieces.filter(t => t === neededPiece(p)).length) : 0);
+  const destination = cement ? 'hopper' : 'building';
+  return `Unload ${n}/${MACHINE.forklift.palletMax} · ${received ? `${received} to ${destination}` : 'on the ground'}${received && received < n ? `; ${n - received} on the ground` : ''}`;
 }

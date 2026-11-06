@@ -1,12 +1,15 @@
 import * as THREE from 'three';
 import {
+  selectGuidance,
   CLOCK_TOWER, HAT_COLORS, MACHINE, MOVE, PIECE_TYPES, INTERACT, currentStage, entryPoint, groundworkDone, groundworkPart, towerBlocker,
   type MachineKind, type PieceTypeId, type SiteLayout,
 } from '@hht/shared';
 import { MachineRenderer } from '../machines/MachineRenderer.ts';
 import { SoloMachines } from '../machines/SoloMachines.ts';
 import { MachineCameras } from '../player/machineCameras.ts';
-import { MachineHints } from '../ui/machineHints.ts';
+import { GameplayGuide } from '../ui/gameplayGuide.ts';
+import { recoveryText, successText } from './gameplayFeedback.ts';
+import { controlLabels, MachineHints } from '../ui/machineHints.ts';
 import { GroundworkView } from '../world/groundworkView.ts';
 import { HighSlotRings } from '../world/highSlots.ts';
 import { MachineCue } from '../world/machineCue.ts';
@@ -74,6 +77,7 @@ export class Game extends GameShell {
   machineRenderer!: MachineRenderer;
   machineCams!: MachineCameras;
   machineHints!: MachineHints;
+  gameplayGuide!: GameplayGuide;
   groundwork!: GroundworkView;
   highSlots!: HighSlotRings;
   cue!: MachineCue;
@@ -152,7 +156,7 @@ export class Game extends GameShell {
     this.puffs = new Puffs();
     scene.add(this.puffs.mesh);
     // feature 003: machines, Groundwork visuals, high-slot rings and the cue
-    this.machines = new SoloMachines(this.site, this.pieces, this.plot, { act: (kind, act) => this.onMachineAct(kind, act) });
+    this.machines = new SoloMachines(this.site, this.pieces, this.plot, { act: (kind, act) => this.onMachineAct(kind, act), snap: () => this.machineHints?.confirmed({ act: 'snap', via: 'crane', by: 'solo' }, 'solo') });
     // only 4 machines in solo: full detail at any distance on the lot
     this.machineRenderer = new MachineRenderer(this.assets, { outlines: this.quality.outlines, shadows: this.quality.tier === 'high', nearDist: 60 });
     scene.add(this.machineRenderer.group);
@@ -196,6 +200,7 @@ export class Game extends GameShell {
     this.hud.setWho(prof.name);
     this.sfx.setMuted(prof.muted);
     this.machineHints = new MachineHints(this.hudRoot, this.profile);
+    this.gameplayGuide = new GameplayGuide(this.hudRoot, this.profile, () => this.machineHints.onEnter(this.machines.seated >= 0 ? this.machines.kindAt(this.machines.seated) : 'excavator', true), () => this.machineHints.hide());
     window.setTimeout(() => void this.sfx.loadSamples(), 800);
     this.sfx.startMusic();
 
@@ -294,10 +299,10 @@ export class Game extends GameShell {
     const pr = this.plot.progress;
     const part = groundworkPart(pr);
     const stage = this.plot.stage;
-    if (part === 'dig') return this.hud.setNeedText(`🚜 Dig ${pr.groundDug}/${CLOCK_TOWER.groundwork.scoops}: use the excavator`);
-    if (part === 'concrete') return this.hud.setNeedText(`🥣 Concrete ${pr.groundPoured}/${CLOCK_TOWER.groundwork.concrete}: use the mixer`);
+    if (part === 'dig') return this.hud.setNeedText(`🚜 Dig ${pr.groundDug}/${CLOCK_TOWER.groundwork.scoops}`);
+    if (part === 'concrete') return this.hud.setNeedText(`🥣 Concrete ${pr.groundPoured}/${CLOCK_TOWER.groundwork.concrete}`);
     if (stage && stage.highSlots > 0 && pr.filledSlots - pr.highFilled >= stage.slotCount - stage.highSlots) {
-      return this.hud.setNeedText(stage.pieceType === 'bell' ? '🏗️ Bell: use the crane' : `🏗️ Roof ${pr.highFilled}/${stage.highSlots}: use the crane`);
+      return this.hud.setNeedText(stage.pieceType === 'bell' ? '🏗️ Bell · crane slot' : `🏗️ Roof ${pr.highFilled}/${stage.highSlots} · crane slots`);
     }
     this.hud.setNeed(this.plot.needed, pr.filledSlots - pr.highFilled, stage ? stage.slotCount - stage.highSlots : 0);
   }
@@ -319,8 +324,11 @@ export class Game extends GameShell {
   private onMachineAct(kind: MachineKind, act: string): void {
     const snd = ACT_SOUND[act];
     if (snd) this.sfx.playSample(snd[0], snd[1]);
-    if (act === 'mixerFull') this.hud.showToast('Mixer is full');
+    if (act === 'mixerFull') this.hud.showToast(recoveryText('mixerFull'));
     if (act === 'mixDone') this.puffs.emit(new THREE.Vector3(this.layout.machines.mixer.chute.x, 0.6, this.layout.machines.mixer.chute.z), 8, 0.5, 0.35);
+    this.machineHints?.confirmed({ act, by: 'solo' }, 'solo');
+    const confirmation = successText(act);
+    if (confirmation) this.hud.showToast(confirmation);
     void kind;
   }
 
@@ -330,6 +338,7 @@ export class Game extends GameShell {
     this.updateNeed();
     void stage;
     this.sfx.play('snap');
+    this.hud.showToast(successText('snap')!);
     const at = piece ? piece.position.clone() : this.layout.plot.clone().add(new THREE.Vector3(0, 0.5, 2.3));
     this.puffs.emit(at, 7, 0.5, 0.35);
     if (!this.profile.get().hintsDone.firstSnap) this.profile.update({ hintsDone: { firstPickup: true, firstSnap: true } });
@@ -338,11 +347,11 @@ export class Game extends GameShell {
 
   private onWrong(piece: Piece | null, needed: PieceTypeId | null, reason?: string): void {
     this.sfx.play('wrong');
-    if (reason === 'groundworkFirst') this.hud.showToast(groundworkPart(this.plot.progress) === 'dig' ? 'Dig the foundation first' : 'Pour the footing first', 2.6);
-    else if (reason === 'tooHigh') this.hud.showToast('Too high: use the crane', 2.6);
+    if (reason === 'groundworkFirst') this.hud.showToast(recoveryText('groundworkFirst', needed, groundworkPart(this.plot.progress) ?? undefined), 2.6);
+    else if (reason === 'tooHigh') this.hud.showToast(recoveryText('tooHigh'), 2.6);
     else if (!needed) this.hud.showToast('The tower is finished! Press “Build again” to start over.');
     else if (piece?.type === 'cone') this.hud.showToast(`Cones are just for fun! The tower needs: ${PIECE_TYPES[needed].label}`);
-    else this.hud.showToast(`Needs: ${PIECE_TYPES[needed].label}`);
+    else this.hud.showToast(recoveryText('wrongPiece', needed));
     this.emit('wrongPiece', { needed });
   }
 
@@ -366,9 +375,12 @@ export class Game extends GameShell {
 
   buildAgain(): void {
     if (this.machines.seated >= 0) this.exitMachine();
+    this.puffs.clear();
+    this.celebration.stop();
+    this.machineHints.hide();
+    this.gameplayGuide.update(null);
     this.machines.reset();
     this.plot.reset();
-    this.celebration.stop();
     this.hud.setCelebrate(false);
     this.cheerTimer = 0;
     this.applyStage();
@@ -568,10 +580,10 @@ export class Game extends GameShell {
     this.target = held || nowSeated || this.machineTargetId >= 0 ? null : findTarget(this.controller.position, this.controller.facing, this.pieces.loose(), this.layout.racks);
     if (nowSeated) {
       const l = this.machines.label();
-      this.hud.setPrompt(l.text, 'E', l.disabled);
+      this.hud.setPrompt(l.text, controlLabels(this.actions.lastDevice).action, l.disabled);
       this.touch?.setMachineMode({ action: l.text, disabled: l.disabled, toss: this.machines.kindAt(this.machines.seated) === 'crane' ? 'Camera' : null });
-      this.machineHints.update(Math.abs(a.move.x) + Math.abs(a.move.y) > 0.1 || a.wasPressed('action'));
-    } else if (this.machineTargetId >= 0) this.hud.setPrompt(`Get in ${MACHINE_NAME[this.machines.kindAt(this.machineTargetId)]}`);
+      this.machineHints.update(a.lastDevice);
+    } else if (this.machineTargetId >= 0) this.hud.setPrompt(`Get in ${MACHINE_NAME[this.machines.kindAt(this.machineTargetId)]}`, controlLabels(this.actions.lastDevice).action);
     else this.hud.setPrompt(null);
     if (!menu && !nowSeated && !seated) {
       if (!held && a.wasPressed('action') && this.machineTargetId >= 0) {
@@ -627,15 +639,18 @@ export class Game extends GameShell {
     } else this.targetRing.visible = false;
 
     // hud
-    const prof = this.profile.get();
-    let arrow: THREE.Vector3 | null = null;
-    if (!prof.hintsDone.firstPickup) {
-      const need = this.plot.needed ?? 'beam';
-      const r = this.layout.racks.find((x) => x.type === need);
-      if (r) arrow = r.top.clone().add(new THREE.Vector3(0, 2.0, 0));
-    } else if (!prof.hintsDone.firstSnap && nowHeld) {
-      arrow = this.markers.slotPosition(this.plot.progress.filledSlots).add(new THREE.Vector3(0, 1.4, 0));
-    }
+    const suggestion = selectGuidance({ mode: 'solo', connected: true, hidden: !!this.profile.get().guidanceHidden,
+      progress: this.plot.progress, held: nowHeld?.type ?? null, machine: this.machines.states[this.machines.seated] ?? null,
+      occupied: [], concreteAvailable: this.pieces.loose().some(p => p.type === 'concrete'), mixerBags: this.machines.mixerBags, mixing: this.machines.mixerMixUntil > 0 });
+    this.gameplayGuide.update(suggestion);
+    this.gameplayGuide.target(suggestion, this.site, 0, this.ctx.camera, this.controller.position);
+    const targetKind = suggestion?.target.kind === 'machine' ? suggestion.target.machine : null;
+    this.cue.update(0, 0, this.plot.progress, () => false, kind => {
+      const m = this.machines.states[['crane', 'excavator', 'forklift', 'mixer'].indexOf(kind)]!;
+      return { x: m.x, z: m.z, top: kind === 'crane' ? this.layout.machines.crane.cabHeight + .8 : 2.3 };
+    }, targetKind);
+    const arrow = null;
+    this.machineHints.update(a.lastDevice);
     const head = pos.clone().add(new THREE.Vector3(0, 1.75, 0));
     const needAt = this.layout.plot.clone().add(new THREE.Vector3(0, 2.9, 2.9));
     this.hud.layout(this.ctx.camera, head, needAt, arrow);

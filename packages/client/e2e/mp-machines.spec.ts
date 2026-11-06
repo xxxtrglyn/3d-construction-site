@@ -158,7 +158,7 @@ test('get in, drive, get out; the other player sees it move; outsiders: Crew onl
   expect(b.errors).toEqual([]);
 });
 
-test('Groundwork end to end: 6 scoops, 4 bags, mix, 4 buckets → Frame unlocks; the cue points at the excavator, then the mixer (US2)', async ({ browser }) => {
+test('Groundwork end to end: 6 scoops, 4 bags, mix, 4 buckets → Frame unlocks; the cue points at the excavator, then cement supply (US2)', async ({ browser }) => {
   const a = await openPlayer(browser);
   await freshWorld(a.page);
   const plot = await hostAPlot(a.page, true);
@@ -193,7 +193,7 @@ test('Groundwork end to end: 6 scoops, 4 bags, mix, 4 buckets → Frame unlocks;
     await idleWith(a.page, exc, 'none');
   }
   await getOut(a.page);
-  await expect.poll(async () => (await net<{ machine: string | null }>(a.page, 'cue')).machine, { timeout: 3000 }).toBe('mixer');
+  await expect(a.page.getByTestId('gameplay-guide')).toContainText(/cement/i); // empty mixer needs supply first
   // 4 cement bags into the hopper
   for (let i = 1; i <= 4; i++) {
     await dev(a.page, 'teleport', sp.mixer.hopper.x, 0, sp.mixer.hopper.z);
@@ -371,4 +371,59 @@ test('a member in the crane holding a piece is removed by the Host: put out with
   expect(loose).toBe(1);
   expect(a.errors).toEqual([]);
   expect(b.errors).toEqual([]);
+});
+
+test('early cement: forklift helps while a teammate occupies excavation without advancing groundwork', async ({ browser }) => {
+  const a = await openPlayer(browser);
+  await freshWorld(a.page);
+  const plot = await hostAPlot(a.page, true);
+  const b = await openPlayer(browser, `e2e=1&w=${await net<number>(a.page, 'worldId')}`);
+  await joinCrew(a.page, b.page, plot);
+  await getIn(a.page, plot, 'excavator');
+  await b.page.bringToFront();
+  await expect(b.page.getByTestId('gameplay-guide')).toContainText(/cement/i);
+  await getIn(b.page, plot, 'forklift');
+  const id = machineId(plot, 'forklift');
+  const rack = SITE.racks.find(r => r.type === 'cement')!;
+  const yaw = Math.atan2(rack.x, rack.z);
+  await dev(b.page, 'machinePose', id, { x: rack.x - Math.sin(yaw) * FORK_REACH, z: rack.z - Math.cos(yaw) * FORK_REACH, yaw, p3: 0 });
+  await expect(b.page.locator('.net-prompt')).toContainText('Load 4');
+  await key(b.page, 'KeyE');
+  await expect.poll(async () => (await plot$(b.page, plot)).palletTypes.length).toBe(4);
+  await expect(b.page.getByTestId('machine-hint')).toBeHidden();
+  const hop = SITE.machines[plot]!.mixer.hopper;
+  const center = SITE.machines[plot]!.center;
+  const hy = Math.atan2(hop.x - center.x, hop.z - center.z);
+  await dev(b.page, 'machinePose', id, { x: hop.x - Math.sin(hy) * FORK_REACH, z: hop.z - Math.cos(hy) * FORK_REACH, yaw: hy, p3: 0 });
+  await expect(b.page.locator('.net-prompt')).toContainText('hopper');
+  await key(b.page, 'KeyE');
+  await expect.poll(async () => (await plot$(b.page, plot)).mixerBags).toBe(4);
+  expect((await plot$(b.page, plot)).groundDug).toBe(0);
+  expect((await plot$(b.page, plot)).groundPoured).toBe(0);
+  expect(a.errors.concat(b.errors)).toEqual([]);
+});
+
+// A competing accepted server update is injected through the existing dev fixture.
+// The operator still uses normal grab/release inputs; the stale preview must disappear.
+test('crane preview clears when another client advances the stage before release', async ({ browser }) => {
+  const a = await openPlayer(browser);
+  await freshWorld(a.page);
+  const plot = await hostAPlot(a.page);
+  const b = await openPlayer(browser, `e2e=1&w=${await net<number>(a.page, 'worldId')}`);
+  await joinCrew(a.page, b.page, plot);
+  await pieceOnPad(a.page, plot, 'beam');
+  await getIn(a.page, plot, 'crane');
+  await hookPiece(a.page, plot);
+  const target = openSlotRefs(SITE.plots[plot]!, SITE.machines[plot]!, { blueprintId: 'clock-tower', groundDug: 6, groundPoured: 4, completedStages: 0, filledSlots: 0, highFilled: 0 })[0]!;
+  await aimHook(a.page, plot, target.x, target.z);
+  await expect.poll(() => net<unknown>(a.page, 'snapRing')).not.toBeNull();
+  await dev(b.page, 'fillStage', plot);
+  await expect.poll(async () => (await plot$(a.page, plot)).completedStages).toBe(1);
+  await expect.poll(() => net<unknown>(a.page, 'snapRing')).toBeNull();
+  const before = (await mpEvents(a.page, 'snap')).length;
+  await key(a.page, 'KeyE');
+  await idleWith(a.page, machineId(plot, 'crane'), 'none');
+  expect((await plot$(a.page, plot)).filledSlots).toBe(0);
+  expect((await mpEvents(a.page, 'snap')).length).toBe(before);
+  expect(a.errors.concat(b.errors)).toEqual([]);
 });

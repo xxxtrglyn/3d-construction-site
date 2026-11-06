@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { EXCAVATOR_REACH, entryPoint, type MachineKind, type MachineSpots, type MachineState } from '@hht/shared';
+import { EXCAVATOR_REACH, FORK_REACH, entryPoint, type MachineKind, type MachineSpots, type MachineState } from '@hht/shared';
 import { debug, openGame, state } from './helpers.ts';
 
 // feature 003: the solo lot has all four machines, Groundwork and the high slots (FR-042, FR-043)
@@ -90,7 +90,7 @@ test('solo: Groundwork with the excavator and the mixer, the crane lifts a roof 
     await idleWith(page, 'excavator', 'none');
   }
   await getOut(page);
-  await expect.poll(() => api<{ machine: string | null }>(page, 'cue'), { timeout: 3000 }).toMatchObject({ machine: 'mixer' });
+  await expect(page.getByTestId('gameplay-guide')).toContainText(/cement/i); // fetch bags before operating an empty mixer
   // 4 cement bags into the hopper, then mix
   for (let i = 1; i <= 4; i++) {
     await dropAt(page, 'cement', spots.mixer.hopper.x, spots.mixer.hopper.z);
@@ -121,5 +121,29 @@ test('solo: Groundwork with the excavator and the mixer, the crane lifts a roof 
   await lift(page, spots, 'bell', spots.highSlots[5]![0]!);
   await expect.poll(async () => (await state(page)).tower.isMasterpiece, { timeout: 5000 }).toBe(true);
   expect(net).toEqual([]);
+  expect(errors).toEqual([]);
+});
+
+
+test('solo forklift prepares cement before excavation and records learning only after loading', async ({ page }) => {
+  const errors = await openGame(page);
+  const spots = await api<MachineSpots>(page, 'machineSpots');
+  const racks = await api<Array<{x:number;z:number;type:string}>>(page, 'supplyRacks');
+  const r = racks.find(r => r.type === 'cement')!;
+  await getIn(page, 'forklift', spots);
+  await expect(page.getByTestId('machine-hint')).toBeVisible();
+  const yaw = Math.atan2(r.x, r.z);
+  await debug(page, 'machinePose', 'forklift', { x:r.x-Math.sin(yaw)*FORK_REACH, z:r.z-Math.cos(yaw)*FORK_REACH, yaw, p3:0 });
+  await expect(page.locator('.net-prompt')).toContainText('Load 4');
+  await key(page, 'KeyE');
+  await idleWith(page, 'forklift', 'pallet');
+  await expect(page.getByTestId('machine-hint')).toBeHidden();
+  const h = spots.mixer.hopper;
+  const hy = Math.atan2(h.x-spots.center.x, h.z-spots.center.z);
+  await debug(page, 'machinePose', 'forklift', { x:h.x-Math.sin(hy)*FORK_REACH, z:h.z-Math.cos(hy)*FORK_REACH, yaw:hy, p3:0 });
+  await expect(page.locator('.net-prompt')).toContainText('hopper');
+  await key(page, 'KeyE');
+  await expect.poll(async () => (await state(page) as unknown as {plot:{mixerBags:number}}).plot.mixerBags).toBe(4);
+  expect((await state(page) as unknown as {plot:{groundwork:{dug:number;poured:number}}}).plot.groundwork).toMatchObject({dug:0,poured:0});
   expect(errors).toEqual([]);
 });

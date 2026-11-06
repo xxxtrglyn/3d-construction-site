@@ -60,12 +60,12 @@ describe('forklift (US4)', () => {
     await a.leave();
   }, 30_000);
 
-  it('cement while pouring goes into its own hopper; leftovers and pallets set down elsewhere become loose pieces', async () => {
+  it('cement during excavation goes into its own hopper; leftovers and pallets set down elsewhere become loose pieces', async () => {
     server = await boot();
     const a = await joinPlayer(server);
     const plot = await host(a, { groundwork: true });
     const b = sys().plots[plot]!;
-    b.progress = { ...b.progress, groundDug: 6 };
+    expect(b.progress.groundDug).toBe(0);
     b.mixerBags = 1;
     sys().syncPlot(plot);
     expect(await enter(a, plot, 'forklift')).toBe('entered');
@@ -78,6 +78,9 @@ describe('forklift (US4)', () => {
     await steps(a, press(16));
     await until(() => plotState(plot).mixerBags === 4);
     expect(sys().pieces.size).toBe(0);
+    expect(b.progress.groundPoured).toBe(0);
+    const loaded = await a.waitFor('machineAct', e => e.act === 'palletLoad');
+    expect(loaded.by).toBe(a.room.sessionId);
     // a pallet set down in the lane becomes loose pieces
     forksAt(plot, cement.x, cement.z, { x: 0, z: 0 });
     b.mixerBags = 0;
@@ -117,3 +120,28 @@ describe('forklift (US4)', () => {
     await a.leave();
   }, 20_000);
 });
+
+it('preserves all pallet material when another worker fills the hopper before unloading', async () => {
+  server = await boot();
+  const a = await joinPlayer(server);
+  const plot = await host(a, { groundwork: true });
+  expect(await enter(a, plot, 'forklift')).toBe('entered');
+  const rack = rackOf('cement');
+  forksAt(plot, rack.x, rack.z, { x: 0, z: 0 });
+  await steps(a, press(16));
+  await until(() => plotState(plot).palletTypes.length === 4);
+  const b = sys().plots[plot]!;
+  b.mixerBags = 4; // concurrent hand delivery fills the receiving hopper
+  sys().syncPlot(plot);
+  const hopper = SITE.machines[plot]!.mixer.hopper;
+  forksAt(plot, hopper.x, hopper.z, SITE.machines[plot]!.center);
+  await steps(a, press(16));
+  await until(() => plotState(plot).palletTypes.length === 0);
+  const materials = [...sys().pieces.values()];
+  expect(materials).toHaveLength(4);
+  expect(materials.every(p => p.type === 'cement' && p.state === 'loose')).toBe(true);
+  expect(b.mixerBags).toBe(4);
+  expect(b.progress.groundPoured).toBe(0);
+  expect(sys().machines.audit.heldPiecesLost).toBe(0);
+  await a.leave();
+}, 20_000);

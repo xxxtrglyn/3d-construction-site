@@ -74,3 +74,7 @@ T080.
   on `?perf=machines` (the headless runs above are software-rendered, so their fps is not meaningful).
 - **Playtest** (SC-001/002/003/009).
 - The 002 gate items accepted as risk at the start (see the first item).
+
+## Entry into 004 (2026-11-05)
+
+Owner explicitly accepted proceeding with all three 004 user stories while 003 art/budget approvals, real-device checks and human playtests remain pending, and deferring the 004 baseline playtest (reply: “yes”). This accepts implementation risk; it does not mark those checks passed.

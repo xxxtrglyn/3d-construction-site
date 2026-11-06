@@ -1,12 +1,15 @@
 import * as THREE from 'three';
 import {
+  forkliftLoadCount, forkliftUnloadLabel, selectGuidance,
   CHAT, CLOCK_TOWER, HAT_COLORS, INTERACT, MACHINE, MACHINE_KINDS, PIECE_TYPES, SITE, atPit, atSpoil, entryPoint, groundworkPart, hookPos,
-  isEmoteId, isPieceTypeId, neededSupply, openSlotRefs, openSlots, plotOfMachine, rackAtForks, snapTarget,
+  isEmoteId, isPieceTypeId, openSlotRefs, plotOfMachine, rackAtForks, snapTarget,
   type EmoteId, type MachineKind, type PieceTypeId, type QuickMessageId, type ServerEvents, type SlotRef,
 } from '@hht/shared';
 import { progressOf } from '../net/connection.ts';
 import type { SampleId } from '../audio/sfx.ts';
-import { MachineHints } from '../ui/machineHints.ts';
+import { GameplayGuide } from '../ui/gameplayGuide.ts';
+import { recoveryText, successText } from './gameplayFeedback.ts';
+import { controlLabels, MachineHints } from '../ui/machineHints.ts';
 import type { CrowdPose } from '../crowd/animation.ts';
 import type { NetConnection } from '../net/connection.ts';
 import type { WorkerPose } from '../player/workerView.ts';
@@ -58,9 +61,10 @@ export class NetPlay extends NetGame {
   shiftBanner!: ShiftBanner;
   chatUi!: ChatUi;
   machineHints!: MachineHints;
+  gameplayGuide!: GameplayGuide;
   /** the slot a crane release would fill right now (FR-027a) */
   litSlot: SlotRef | null = null;
-  private machineInput = false;
+  private guidanceContext = '';
   private target: Target | null = null;
   private armDrop = false;
   private guide: THREE.Vector3 | null = null;
@@ -110,13 +114,13 @@ export class NetPlay extends NetGame {
     this.shiftBanner = new ShiftBanner(this.hudRoot);
     this.chatUi = new ChatUi(this.hudRoot, (channel, text) => send('chat', { channel, text }));
     this.machineHints = new MachineHints(this.hudRoot, this.profile);
+    this.gameplayGuide = new GameplayGuide(this.hudRoot, this.profile, () => this.machineHints.onEnter(this.myMachineKind ?? 'excavator', true), () => this.machineHints.hide());
     this.events.addEventListener('machineEntered', (e) => this.machineHints.onEnter((e as CustomEvent<MachineKind>).detail));
     this.events.addEventListener('machineLeft', () => {
       this.machineHints.hide();
       this.touch?.setMachineMode(null);
       this.hud.setPrompt(null);
     });
-    this.events.addEventListener('machineAct', () => (this.machineInput = true));
     this.events.addEventListener('machineHelp', () => this.machineHints.onEnter(this.myMachineKind ?? 'crane', true));
     this.chatUi.setHidden(this.profile.get().hideAllChat);
     this.arrow = document.createElement('div');
@@ -141,36 +145,35 @@ export class NetPlay extends NetGame {
   override attach(conn: NetConnection): void {
     super.attach(conn);
     this.requestCards?.clear();
+    this.machineHints?.hide();
+    this.gameplayGuide?.update(null);
+    conn.on('closed', () => {
+      if (this.conn !== conn) return;
+      this.machineHints.hide(); this.gameplayGuide.update(null);
+      this.world.cue.group.visible = false; this.world.highSlots.update(0, [], null);
+    });
     conn.on('snap', (e) => {
+      if (e.plot === this.myPlot()) this.machineHints.confirmed({ ...e, act: 'snap' }, this.me);
       const d = SITE.plots[e.plot];
       const near = !!d && Math.hypot(d.x - this.position.x, d.z - this.position.z) < 30;
       this.world.onSnap(e, near);
       const mine = this.myPlot() === e.plot;
       if (e.result === 'stageComplete' && mine) this.hud.showToast('★ Stage complete!');
       if (e.result === 'masterpiece' && mine) this.hud.showToast('★ Masterpiece! ★', 4);
-      if (e.by === this.me) this.emit('snapped', e);
+      if (e.by === this.me) { this.emit('snapped', e); if (e.result === 'snapped') this.hud.showToast(successText('snap')!); }
     });
     conn.on('celebrate', (e) => this.world.onCelebrate(e, this.conn.clock.serverNow()));
     conn.on('hint', (h) => {
       this.sfx.play('wrong');
-      if (h.kind === 'wrongPiece') this.hud.showToast(`Needs: ${PIECE_TYPES[h.needed].label}`);
-      else if (h.kind === 'binFull') this.hud.showToast('That supply bin is full');
-      else if (h.kind === 'groundworkFirst') this.hud.showToast(h.part === 'dig' ? 'Dig the foundation first' : 'Pour the footing first', 2.6);
-      else if (h.kind === 'tooHigh') this.hud.showToast('Too high: use the crane', 2.6);
-      else if (h.kind === 'crewOnlyMachine') this.hud.showToast('Crew only');
-      else if (h.kind === 'mixerFull') this.hud.showToast('Mixer is full');
-      else this.hud.showToast('Only this crew can build here');
+      this.hud.showToast(recoveryText(h.kind, h.kind === 'wrongPiece' ? h.needed : undefined, h.kind === 'groundworkFirst' ? h.part : undefined), 3);
     });
     // feature 003: machines
     conn.on('machineResult', (r) => {
       this.enteringUntil = 0;
-      const t: Record<string, string> = {
-        notCrew: 'Crew only', notBuilding: 'Crew only', busy: 'Someone is driving', handsFull: 'Hands full — put it down first', tooFar: 'Move closer to get in',
-      };
       if (r.result === 'entered') this.sfx.playSample('hydraulic', 0.6);
       else {
         this.sfx.play('wrong');
-        this.hud.showToast(t[r.result] ?? r.result);
+        this.hud.showToast(recoveryText(r.result));
       }
     });
     conn.on('machineExit', (e) => {
@@ -180,6 +183,11 @@ export class NetPlay extends NetGame {
       if (t[e.reason]) this.hud.showToast(t[e.reason] as string, 2.6);
     });
     conn.on('machineAct', (e) => {
+      if (e.plot === this.myPlot()) {
+        this.machineHints.confirmed(e, this.me);
+        const text = successText(e.act);
+        if (e.by === this.me && text) this.hud.showToast(text);
+      }
       const s = ACT_SOUND[e.act];
       const pose = this.machinePoses[e.id];
       const d = pose ? Math.hypot(pose.x - this.position.x, pose.z - this.position.z) : 0;
@@ -356,7 +364,7 @@ export class NetPlay extends NetGame {
     const w = this.predictor.state;
     if (held) {
       this.target = null;
-      this.hud.setPrompt('Drop · hold to toss');
+      this.hud.setPrompt('Drop · hold to toss', controlLabels(this.actions.lastDevice).action);
       if (a.wasPressed('action')) this.armDrop = true;
       const released = a.releasedAfter('action');
       if (a.wasPressed('toss')) {
@@ -376,7 +384,7 @@ export class NetPlay extends NetGame {
     this.armDrop = false;
     this.target = this.findTarget(st, w.x, w.z, w.facing);
     const t = this.target;
-    this.hud.setPrompt(t ? this.promptFor(t) : null, 'E', t?.kind === 'machine' && !t.ok);
+    this.hud.setPrompt(t ? this.promptFor(t) : null, controlLabels(this.actions.lastDevice).action, t?.kind === 'machine' && !t.ok);
     if (!t || !a.wasPressed('action')) return false;
     switch (t.kind) {
       case 'machine':
@@ -509,14 +517,10 @@ export class NetPlay extends NetGame {
         if (!progress || groundworkPart(progress) !== 'dig') return { text: 'The pit is dug', disabled: true };
         return atPit(s, spots) ? { text: 'Scoop', disabled: false } : { text: 'Move closer to the pit', disabled: true };
       case 'forklift': {
-        if (s.load.kind === 'pallet') return { text: `Unload ${s.load.pieces.length} ${PLURAL[s.load.pieces[0] ?? 'brick']}`, disabled: false };
+        if (s.load.kind === 'pallet') return { text: progress ? forkliftUnloadLabel(s, SITE, plot, progress, pv?.mixerBags ?? 0, (pv?.mixerMixUntil ?? 0) > this.conn.clock.serverNow()) : 'Unload safely on the ground', disabled: false };
         const rack = SITE.racks[rackAtForks(s, SITE)];
         if (!rack) return { text: 'Drive to a rack', disabled: true };
-        if (!progress || neededSupply(progress) !== rack.type) return { text: `${PIECE_TYPES[rack.type].label}: not needed`, disabled: true };
-        const open = openSlots(progress);
-        const n = rack.type === 'cement'
-          ? Math.min(MACHINE.forklift.palletMax, CLOCK_TOWER.groundwork.concrete - progress.groundPoured - (pv?.mixerBags ?? 0))
-          : Math.min(MACHINE.forklift.palletMax, open.hand > 0 ? open.hand : open.high);
+        const n = progress ? forkliftLoadCount(progress, rack.type, pv?.mixerBags ?? 0) : 0;
         return n > 0 ? { text: `Load ${n} ${PLURAL[rack.type]}`, disabled: false } : { text: 'Nothing needed', disabled: true };
       }
       case 'crane':
@@ -531,15 +535,13 @@ export class NetPlay extends NetGame {
     }
   }
 
-  protected override onMachine(_dt: number, blocked: boolean): void {
+  protected override onMachine(_dt: number, _blocked: boolean): void {
     const l = this.machineLabel();
     const kind = this.myMachineKind;
-    this.hud.setPrompt(l.text, 'E', l.disabled);
+    this.hud.setPrompt(l.text, controlLabels(this.actions.lastDevice).action, l.disabled);
     this.touch?.setMachineMode({ action: l.text, disabled: l.disabled, toss: kind === 'crane' ? 'Camera' : null });
     const a = this.actions;
-    const input = !blocked && (Math.abs(a.move.x) > 0.1 || Math.abs(a.move.y) > 0.1 || this.machineInput);
-    this.machineHints.update(input);
-    this.machineInput = false;
+    this.machineHints.update(a.lastDevice);
   }
 
   /** The lit ring: where a crane release would snap right now (shared snapTarget, FR-027a). */
@@ -603,6 +605,32 @@ export class NetPlay extends NetGame {
     this.chatUi.setHidden(this.profile.get().hideAllChat);
     if (this.foremanDialog.isOpen && Math.hypot(this.position.x - SITE.foreman.x, this.position.z - SITE.foreman.z) > SITE.foreman.talkRadius + 1.5) this.foremanDialog.close();
     this.updateGuide();
+    const plot = this.myPlot();
+    const context = `${st.shift.epoch}:${plot}`;
+    if (context !== this.guidanceContext) { this.guidanceContext = context; this.guide = null; this.arrow.style.display = 'none'; this.machineHints.hide(); this.gameplayGuide.update(null); this.world.clearFeedback(); }
+    const pv = st.plots[plot];
+    const held = st.players.get(this.me)?.heldType;
+    let concreteAvailable = false;
+    st.pieces.forEach(p => { const def = SITE.plots[plot]; if (def && p.type === 'concrete' && Math.hypot(p.x - def.x, p.z - def.z) < 10) concreteAvailable = true; });
+    const suggestion = selectGuidance({ concreteAvailable, mode: 'multiplayer', connected: this.conn.closedCode === null, hidden: !!this.profile.get().guidanceHidden,
+      progress: pv && pv.state !== 'free' ? progressOf(pv) : null, held: isPieceTypeId(held) ? held : null,
+      machine: this.machinePred?.state ?? null, occupied: MACHINE_KINDS.filter((_, i) => !!pv?.machineOps[i]),
+      mixerBags: pv?.mixerBags ?? 0, mixing: (pv?.mixerMixUntil ?? 0) > serverNow,
+      allPlotsBusy: Array.from(st.plots).every(p => p.state !== 'free'),
+      donationPlot: Array.from(st.plots).findIndex(p => p.state === 'building' && p.bin.length < 10) });
+    this.gameplayGuide.update(suggestion);
+    this.gameplayGuide.target(suggestion, SITE, plot, this.ctx.camera, this.position);
+    const targetKind = suggestion?.target.kind === 'machine' ? suggestion.target.machine : null;
+    this.world.cue.update(0, plot, pv ? progressOf(pv) : null, () => false, kind => {
+      const spots = SITE.machines[plot]!;
+      const pose = this.machinePoses[plot * 4 + MACHINE_KINDS.indexOf(kind)];
+      return kind === 'crane' ? { x: spots.crane.x, z: spots.crane.z, top: spots.crane.cabHeight + .8 } : { x: pose?.x ?? spots.mixer.x, z: pose?.z ?? spots.mixer.z, top: 2.3 };
+    }, targetKind);
+    if (plot < 0 && this.guide && !this.profile.get().guidanceHidden && this.conn.closedCode === null) {
+      this.gameplayGuide.update({ key: 'visit', text: 'Follow the arrow to the crew sign to request to join', target: { kind: 'none' } });
+      this.gameplayGuide.target(null, SITE, plot, this.ctx.camera);
+    } else this.arrow.style.display = 'none';
+    this.machineHints.update(this.actions.lastDevice);
   }
 
   private updateGuide(): void {

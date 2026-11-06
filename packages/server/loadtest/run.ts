@@ -162,13 +162,16 @@ async function main(): Promise<void> {
   const connected = all.filter((b) => b.connected).length;
   rows.push({ name: 'bots.connected', limit: botCount, actual: connected, pass: connected === botCount });
   // feature 003: machines really exercised (full runs only)
-  const usage = world?.systems.machines.usage ?? { groundworkDone: 0, craneSnaps: 0, forkliftSnaps: 0, maxMachinesMoving: 0 };
+  const usage = world?.systems.machines.usage ?? { earlyCementLoads: 0, earlyCementDelivered: 0, groundworkDone: 0, craneSnaps: 0, forkliftSnaps: 0, maxMachinesMoving: 0 };
   const machineBytes = world ? dist(world.metricsRef.machineBytesPerClientPerS.values().slice(Math.round(WARMUP_S))) : dist([]);
   const machines = {
+    earlyCementLoads: usage.earlyCementLoads, earlyCementDelivered: usage.earlyCementDelivered,
     groundworkDone: usage.groundworkDone, craneSnaps: usage.craneSnaps, forkliftSnaps: usage.forkliftSnaps, maxMachinesMoving: usage.maxMachinesMoving,
     machineBytesPerClientPerS: { avg: machineBytes.avg, p95: machineBytes.p95 },
   };
   if (world && mode === 'full') {
+    rows.push({ name: 'machines.earlyCementLoads', limit: 1, actual: usage.earlyCementLoads, pass: usage.earlyCementLoads >= 1 });
+    rows.push({ name: 'machines.earlyCementDelivered', limit: 1, actual: usage.earlyCementDelivered, pass: usage.earlyCementDelivered >= 1 });
     rows.push({ name: 'machines.groundworkDone', limit: 4, actual: usage.groundworkDone, pass: usage.groundworkDone >= 4 });
     rows.push({ name: 'machines.craneSnaps', limit: 8, actual: usage.craneSnaps, pass: usage.craneSnaps >= 8 });
     rows.push({ name: 'behaviors.palletUnload', limit: 10, actual: behaviors.palletUnload ?? 0, pass: (behaviors.palletUnload ?? 0) >= 10 });

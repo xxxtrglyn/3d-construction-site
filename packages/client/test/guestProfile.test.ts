@@ -79,3 +79,13 @@ describe('ProfileStore', () => {
     expect(isValidGuestName(store.shuffleName(seededRng(7)))).toBe(true);
   });
 });
+
+it('normalizes machine learning without replacing identity or promoting seen hints', () => {
+  const storage = new MemStorage();
+  const original = new ProfileStore(storage).get();
+  storage.setItem(PROFILE_KEY, JSON.stringify({ ...original, seenMachineHints: ['crane'], completedMachineHints: ['forklift', 'bogus', 'forklift'], guidanceHidden: 'yes' }));
+  const profile = new ProfileStore(storage).get();
+  expect(profile.playerKey).toBe(original.playerKey);
+  expect(profile.completedMachineHints).toEqual(['forklift']);
+  expect(profile.guidanceHidden).toBe(false);
+});

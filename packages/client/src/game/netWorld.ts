@@ -346,6 +346,8 @@ export class NetWorld {
     (this.celebrations[i] as Celebration).start(new THREE.Vector3(d.x, 0, d.z), Math.max(2, (e.until - serverNow) / 1000));
   }
 
+  clearFeedback(): void { this.puffs.clear(); for (const c of this.celebrations) c.stop(); }
+
   puffAt(p: THREE.Vector3, n = 6): void {
     this.puffs.emit(p, n, 0.5, 0.35);
   }
